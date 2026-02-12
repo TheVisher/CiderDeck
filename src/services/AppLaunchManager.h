@@ -42,6 +42,7 @@ private:
     // Pending move: after launching, watch for the new window and move it
     struct PendingMove {
         QString wmClass;
+        QString desktopName;  // .desktop filename without extension
         QString targetMonitor;
         int retries = 0;
     };

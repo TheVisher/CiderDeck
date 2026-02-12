@@ -4,15 +4,34 @@ Card {
     id: clockTile
 
     property string sizeClass: parent ? parent.sizeClass : "small"
+    property var settings: parent ? parent.settings : ({})
+
+    // Clock format settings
+    readonly property string timeFormat: settings.timeFormat || "12h"
+    readonly property string dateFormat: settings.dateFormat || "ddd, MMM d"
+    readonly property bool showSeconds: settings.showSeconds || false
+
+    function formatTime(date) {
+        if (timeFormat === "24h") {
+            return showSeconds ? Qt.formatTime(date, "HH:mm:ss") : Qt.formatTime(date, "HH:mm")
+        } else {
+            return showSeconds ? Qt.formatTime(date, "h:mm:ss AP") : Qt.formatTime(date, "h:mm AP")
+        }
+    }
+
+    function formatDate(date) {
+        return Qt.formatDate(date, dateFormat)
+    }
 
     Timer {
-        interval: 15000
+        interval: clockTile.showSeconds ? 1000 : 15000
         running: true
         repeat: true
         triggeredOnStart: true
         onTriggered: {
-            timeText.text = Qt.formatTime(new Date(), "h:mm")
-            dateText.text = Qt.formatDate(new Date(), "ddd, MMM d")
+            var now = new Date()
+            timeText.text = clockTile.formatTime(now)
+            dateText.text = clockTile.formatDate(now)
         }
     }
 

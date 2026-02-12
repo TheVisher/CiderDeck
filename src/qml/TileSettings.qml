@@ -85,9 +85,105 @@ Flickable {
             }
         }
 
+        SettingsRow {
+            label: "Content scale"
+            RowLayout {
+                spacing: 8
+                Slider {
+                    from: 0.5; to: 2.0; stepSize: 0.05
+                    value: tileSettings.settings.contentScale || 1.0
+                    onMoved: tileSettings.saveSetting("contentScale", Math.round(value * 100) / 100)
+                    implicitWidth: 140
+                }
+                Text {
+                    text: Math.round((tileSettings.settings.contentScale || 1.0) * 100) + "%"
+                    color: themeManager.secondaryTextColor
+                    font.pixelSize: 12
+                }
+            }
+        }
+
         Rectangle { Layout.fillWidth: true; height: 1; color: themeManager.borderColor }
 
         // --- Type-specific settings ---
+
+        // Clock / Date
+        ColumnLayout {
+            spacing: 10
+            visible: tileSettings.tileType === "clock_date"
+            Layout.fillWidth: true
+
+            Text {
+                text: "Clock / Date"
+                color: themeManager.accentColor
+                font.pixelSize: 14
+                font.bold: true
+            }
+
+            SettingsRow {
+                label: "Time format"
+                RowLayout {
+                    spacing: 8
+                    Button {
+                        text: "12h"; flat: true
+                        highlighted: (tileSettings.settings.timeFormat || "12h") === "12h"
+                        onClicked: tileSettings.saveSetting("timeFormat", "12h")
+                        contentItem: Text { text: parent.text; color: parent.highlighted ? themeManager.accentColor : themeManager.textColor; font.pixelSize: 13 }
+                        background: Rectangle {
+                            implicitWidth: 44; implicitHeight: 28; radius: 6
+                            color: parent.highlighted ? Qt.rgba(themeManager.accentColor.r, themeManager.accentColor.g, themeManager.accentColor.b, 0.15) : "transparent"
+                            border.width: 1; border.color: parent.highlighted ? themeManager.accentColor : themeManager.borderColor
+                        }
+                    }
+                    Button {
+                        text: "24h"; flat: true
+                        highlighted: (tileSettings.settings.timeFormat || "12h") === "24h"
+                        onClicked: tileSettings.saveSetting("timeFormat", "24h")
+                        contentItem: Text { text: parent.text; color: parent.highlighted ? themeManager.accentColor : themeManager.textColor; font.pixelSize: 13 }
+                        background: Rectangle {
+                            implicitWidth: 44; implicitHeight: 28; radius: 6
+                            color: parent.highlighted ? Qt.rgba(themeManager.accentColor.r, themeManager.accentColor.g, themeManager.accentColor.b, 0.15) : "transparent"
+                            border.width: 1; border.color: parent.highlighted ? themeManager.accentColor : themeManager.borderColor
+                        }
+                    }
+                }
+            }
+
+            SettingsRow {
+                label: "Show seconds"
+                Switch {
+                    checked: tileSettings.settings.showSeconds || false
+                    onToggled: tileSettings.saveSetting("showSeconds", checked)
+                }
+            }
+
+            SettingsRow {
+                label: "Date format"
+                ComboBox {
+                    model: [
+                        "ddd, MMM d",
+                        "ddd, MMM d, yyyy",
+                        "MMM d, yyyy",
+                        "MM/dd/yyyy",
+                        "dd/MM/yyyy",
+                        "yyyy-MM-dd",
+                        "MMMM d, yyyy",
+                        "ddd, MMMM d"
+                    ]
+                    currentIndex: {
+                        var fmt = tileSettings.settings.dateFormat || "ddd, MMM d"
+                        var items = ["ddd, MMM d", "ddd, MMM d, yyyy", "MMM d, yyyy", "MM/dd/yyyy", "dd/MM/yyyy", "yyyy-MM-dd", "MMMM d, yyyy", "ddd, MMMM d"]
+                        var idx = items.indexOf(fmt)
+                        return idx >= 0 ? idx : 0
+                    }
+                    onActivated: (index) => {
+                        var items = ["ddd, MMM d", "ddd, MMM d, yyyy", "MMM d, yyyy", "MM/dd/yyyy", "dd/MM/yyyy", "yyyy-MM-dd", "MMMM d, yyyy", "ddd, MMMM d"]
+                        tileSettings.saveSetting("dateFormat", items[index])
+                    }
+                    implicitWidth: 180
+                }
+            }
+        }
 
         // App Launcher
         ColumnLayout {

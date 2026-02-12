@@ -42,15 +42,16 @@ void AppLaunchManager::onWindowsChanged() {
         auto &pending = it.next();
         pending.retries++;
 
-        QString windowId = kwinClient_->findWindowByClass(pending.wmClass);
+        QString windowId = kwinClient_->findWindowBest(pending.wmClass, pending.desktopName);
         if (!windowId.isEmpty()) {
             qInfo() << "[AppLaunchManager] Moving new window" << pending.wmClass
-                     << "to" << pending.targetMonitor;
+                     << "(desktop:" << pending.desktopName << ") to" << pending.targetMonitor;
             kwinClient_->moveWindowToScreen(windowId, pending.targetMonitor);
             it.remove();
         } else if (pending.retries > 20) {
             // Give up after ~10 seconds
-            qWarning() << "[AppLaunchManager] Timed out waiting for window" << pending.wmClass;
+            qWarning() << "[AppLaunchManager] Timed out waiting for window"
+                        << pending.wmClass << "desktop:" << pending.desktopName;
             it.remove();
         }
     }
@@ -62,19 +63,26 @@ void AppLaunchManager::onWindowsChanged() {
 
 void AppLaunchManager::launch(const QString &desktopFile, const QString &command,
                               const QString &targetMonitor, bool raiseExisting) {
+    // Derive wmClass and desktopName from the desktop file
+    QString wmClass;
+    QString desktopName;  // filename without .desktop extension, no path
+    if (!desktopFile.isEmpty()) {
+        auto entry = parseDesktopFile(desktopFile);
+        wmClass = entry.wmClass;
+        // Derive desktopName (what KWin reports as desktopFileName)
+        desktopName = desktopFile;
+        desktopName.remove(QStringLiteral(".desktop"));
+        if (desktopName.contains(QLatin1Char('/'))) {
+            desktopName = desktopName.mid(desktopName.lastIndexOf(QLatin1Char('/')) + 1);
+        }
+        if (wmClass.isEmpty()) {
+            wmClass = desktopName;
+        }
+    }
+
     // If raiseExisting, try to find and activate an existing window first
     if (raiseExisting && kwinClient_ && !desktopFile.isEmpty()) {
-        auto entry = parseDesktopFile(desktopFile);
-        QString wmClass = entry.wmClass;
-        if (wmClass.isEmpty()) {
-            wmClass = desktopFile;
-            wmClass.remove(QStringLiteral(".desktop"));
-            if (wmClass.contains(QLatin1Char('/'))) {
-                wmClass = wmClass.mid(wmClass.lastIndexOf(QLatin1Char('/')) + 1);
-            }
-        }
-
-        QString windowId = kwinClient_->findWindowByClass(wmClass);
+        QString windowId = kwinClient_->findWindowBest(wmClass, desktopName);
         if (!windowId.isEmpty()) {
             if (!targetMonitor.isEmpty()) {
                 kwinClient_->moveWindowToScreen(windowId, targetMonitor);
@@ -83,20 +91,6 @@ void AppLaunchManager::launch(const QString &desktopFile, const QString &command
             }
             emit launched(desktopFile);
             return;
-        }
-    }
-
-    // Determine wmClass for post-launch window targeting
-    QString wmClass;
-    if (!targetMonitor.isEmpty() && kwinClient_ && !desktopFile.isEmpty()) {
-        auto entry = parseDesktopFile(desktopFile);
-        wmClass = entry.wmClass;
-        if (wmClass.isEmpty()) {
-            wmClass = desktopFile;
-            wmClass.remove(QStringLiteral(".desktop"));
-            if (wmClass.contains(QLatin1Char('/'))) {
-                wmClass = wmClass.mid(wmClass.lastIndexOf(QLatin1Char('/')) + 1);
-            }
         }
     }
 
@@ -124,9 +118,10 @@ void AppLaunchManager::launch(const QString &desktopFile, const QString &command
         emit launched(desktopFile);
 
         // Queue a pending move if we have a target monitor
-        if (!targetMonitor.isEmpty() && !wmClass.isEmpty() && kwinClient_) {
+        if (!targetMonitor.isEmpty() && kwinClient_ && (!wmClass.isEmpty() || !desktopName.isEmpty())) {
             PendingMove pending;
             pending.wmClass = wmClass;
+            pending.desktopName = desktopName;
             pending.targetMonitor = targetMonitor;
             pending.retries = 0;
             pendingMoves_.append(pending);

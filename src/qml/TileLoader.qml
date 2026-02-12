@@ -31,6 +31,12 @@ Item {
     // Tile-specific opacity (passed to Card background, NOT the whole tile)
     readonly property real effectiveOpacity: tileOpacityValue >= 0 ? tileOpacityValue : deckConfig.globalOpacity
 
+    // Content scale factor (from tile settings, default 1.0)
+    readonly property real contentScaleValue: {
+        var s = tileSettingsValue ? tileSettingsValue.contentScale : undefined
+        return (s !== undefined && s > 0) ? s : 1.0
+    }
+
     // Size class for adaptive tiles
     readonly property string sizeClass: {
         if (width < 200 || height < 200) return "tiny"
@@ -56,6 +62,14 @@ Item {
     Loader {
         id: contentLoader
         anchors.fill: parent
+
+        // Content scaling: scale from center
+        transform: Scale {
+            origin.x: contentLoader.width / 2
+            origin.y: contentLoader.height / 2
+            xScale: tileLoader.contentScaleValue
+            yScale: tileLoader.contentScaleValue
+        }
 
         sourceComponent: {
             switch (tileLoader.tileTypeValue) {

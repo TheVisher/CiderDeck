@@ -25,6 +25,8 @@ public:
     // Check if a window matching a resource class is running
     Q_INVOKABLE bool isAppRunning(const QString &resourceClass) const;
     Q_INVOKABLE QString findWindowByClass(const QString &resourceClass) const;
+    Q_INVOKABLE QString findWindowByDesktopName(const QString &desktopName) const;
+    Q_INVOKABLE QString findWindowBest(const QString &wmClass, const QString &desktopName) const;
 
 public slots:
     void pushWindows(const QString &jsonPayload);

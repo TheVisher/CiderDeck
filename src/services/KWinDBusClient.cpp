@@ -227,4 +227,39 @@ QString KWinDBusClient::findWindowByClass(const QString &resourceClass) const {
     return {};
 }
 
+QString KWinDBusClient::findWindowByDesktopName(const QString &desktopName) const {
+    const QString lower = desktopName.toLower();
+    for (const auto &val : windows_) {
+        const auto win = val.toObject();
+        if (win["desktopFile"].toString().toLower() == lower) {
+            return win["id"].toString();
+        }
+    }
+    return {};
+}
+
+QString KWinDBusClient::findWindowBest(const QString &wmClass, const QString &desktopName) const {
+    // 1. Exact resourceClass match
+    QString id = findWindowByClass(wmClass);
+    if (!id.isEmpty()) return id;
+
+    // 2. Exact desktopFile match
+    if (!desktopName.isEmpty()) {
+        id = findWindowByDesktopName(desktopName);
+        if (!id.isEmpty()) return id;
+    }
+
+    // 3. Partial resourceClass match (contains)
+    const QString lower = wmClass.toLower();
+    for (const auto &val : windows_) {
+        const auto win = val.toObject();
+        const QString rc = win["resourceClass"].toString().toLower();
+        if (rc.contains(lower) || lower.contains(rc)) {
+            return win["id"].toString();
+        }
+    }
+
+    return {};
+}
+
 } // namespace ciderdeck

@@ -6,7 +6,33 @@ Card {
     property string sizeClass: parent ? parent.sizeClass : "small"
 
     readonly property bool isVertical: height > width
-    property real currentBrightness: brightnessService.brightness / 100
+
+    // Decouple visual from async service during drag
+    property bool dragging: false
+    property real localBrightness: brightnessService.brightness / 100
+
+    // Only sync from service when NOT dragging
+    Connections {
+        target: brightnessService
+        function onBrightnessChanged() {
+            if (!brightnessTile.dragging) {
+                brightnessTile.localBrightness = brightnessService.brightness / 100
+            }
+        }
+    }
+
+    // Throttle ddcutil calls during drag (max every 200ms)
+    Timer {
+        id: ddcThrottle
+        interval: 200
+        property int pendingPercent: -1
+        onTriggered: {
+            if (pendingPercent >= 0) {
+                brightnessService.setBrightness(pendingPercent)
+                pendingPercent = -1
+            }
+        }
+    }
 
     Column {
         anchors.fill: parent
@@ -25,7 +51,7 @@ Card {
                 font.pixelSize: 18
             }
             Text {
-                text: Math.round(brightnessTile.currentBrightness * 100) + "%"
+                text: Math.round(brightnessTile.localBrightness * 100) + "%"
                 color: themeManager.textColor
                 font.pixelSize: 14
                 font.weight: Font.DemiBold
@@ -47,14 +73,17 @@ Card {
 
                 Rectangle {
                     width: brightnessTile.isVertical ? parent.width
-                           : parent.width * brightnessTile.currentBrightness
+                           : parent.width * brightnessTile.localBrightness
                     height: brightnessTile.isVertical
-                            ? parent.height * brightnessTile.currentBrightness
+                            ? parent.height * brightnessTile.localBrightness
                             : parent.height
                     radius: 4
                     color: "#FFD54F"
                     anchors.left: brightnessTile.isVertical ? parent.left : undefined
                     anchors.bottom: brightnessTile.isVertical ? parent.bottom : undefined
+
+                    Behavior on width { enabled: !brightnessTile.dragging; NumberAnimation { duration: 80 } }
+                    Behavior on height { enabled: !brightnessTile.dragging; NumberAnimation { duration: 80 } }
                 }
 
                 // Thumb indicator
@@ -67,9 +96,9 @@ Card {
                     border.color: themeManager.borderColor
                     x: brightnessTile.isVertical
                        ? (parent.width - width) / 2
-                       : parent.width * brightnessTile.currentBrightness - width / 2
+                       : parent.width * brightnessTile.localBrightness - width / 2
                     y: brightnessTile.isVertical
-                       ? parent.height * (1 - brightnessTile.currentBrightness) - height / 2
+                       ? parent.height * (1 - brightnessTile.localBrightness) - height / 2
                        : (parent.height - height) / 2
                 }
             }
@@ -90,13 +119,33 @@ Card {
                         percent = (mouse.x - trackLeft) / trackW
                     }
                     percent = Math.max(0.01, Math.min(1, percent))
-                    brightnessTile.currentBrightness = percent
-                    brightnessService.setBrightness(Math.round(percent * 100))
+                    brightnessTile.localBrightness = percent
+
+                    // Throttle ddcutil calls
+                    let intPercent = Math.round(percent * 100)
+                    if (!ddcThrottle.running) {
+                        brightnessService.setBrightness(intPercent)
+                        ddcThrottle.start()
+                    } else {
+                        ddcThrottle.pendingPercent = intPercent
+                    }
                 }
 
-                onPressed: (mouse) => updateBrightness(mouse)
+                onPressed: (mouse) => {
+                    brightnessTile.dragging = true
+                    updateBrightness(mouse)
+                }
                 onPositionChanged: (mouse) => {
                     if (pressed) updateBrightness(mouse)
+                }
+                onReleased: {
+                    brightnessTile.dragging = false
+                    // Send final value
+                    let intPercent = Math.round(brightnessTile.localBrightness * 100)
+                    brightnessService.setBrightness(intPercent)
+                }
+                onCanceled: {
+                    brightnessTile.dragging = false
                 }
             }
         }
