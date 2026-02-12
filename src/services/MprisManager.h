@@ -66,6 +66,7 @@ private slots:
     void onServiceRegistered(const QString &service);
     void onServiceUnregistered(const QString &service);
     void pollPosition();
+    void onPropertiesChanged(const QString &interface, const QVariantMap &changed, const QStringList &invalidated);
 
 private:
     void discoverPlayers();

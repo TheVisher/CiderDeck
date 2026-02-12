@@ -27,7 +27,7 @@ MprisManager::MprisManager(QObject *parent)
     QDBusConnection::sessionBus().connect(
         QString(), QStringLiteral("/org/mpris/MediaPlayer2"),
         kPropertiesInterface, QStringLiteral("PropertiesChanged"),
-        this, SLOT(fetchMetadata()));
+        this, SLOT(onPropertiesChanged(QString,QVariantMap,QStringList)));
 
     discoverPlayers();
 }
@@ -122,6 +122,43 @@ void MprisManager::onServiceUnregistered(const QString &service) {
     }
 }
 
+void MprisManager::onPropertiesChanged(const QString &interface,
+                                        const QVariantMap &changed,
+                                        const QStringList &invalidated) {
+    Q_UNUSED(invalidated)
+    if (interface != kPlayerInterface) return;
+
+    if (changed.contains("PlaybackStatus")) {
+        QString newStatus = changed["PlaybackStatus"].toString();
+        if (playbackStatus_ != newStatus) {
+            playbackStatus_ = newStatus;
+            emit playbackStatusChanged();
+        }
+    }
+
+    if (changed.contains("Metadata")) {
+        fetchMetadata();
+    } else if (changed.contains("PlaybackStatus")) {
+        // Already handled above, but also refresh controls
+        fetchControls();
+    }
+
+    // Handle other property changes
+    bool controlsChanged = false;
+    auto updateBool = [&](const QString &key, bool &field) {
+        if (changed.contains(key)) {
+            bool val = changed[key].toBool();
+            if (field != val) { field = val; controlsChanged = true; }
+        }
+    };
+    updateBool("CanGoNext", canGoNext_);
+    updateBool("CanGoPrevious", canGoPrevious_);
+    updateBool("CanPlay", canPlay_);
+    updateBool("CanPause", canPause_);
+    updateBool("CanSeek", canSeek_);
+    if (controlsChanged) emit this->controlsChanged();
+}
+
 void MprisManager::fetchMetadata() {
     if (currentPlayer_.isEmpty()) return;
 
@@ -207,27 +244,27 @@ void MprisManager::pollPosition() {
 
 void MprisManager::playPause() {
     auto *iface = playerInterface();
-    if (iface) iface->call("PlayPause");
+    if (iface) { iface->call("PlayPause"); delete iface; }
 }
 
 void MprisManager::next() {
     auto *iface = playerInterface();
-    if (iface) iface->call("Next");
+    if (iface) { iface->call("Next"); delete iface; }
 }
 
 void MprisManager::previous() {
     auto *iface = playerInterface();
-    if (iface) iface->call("Previous");
+    if (iface) { iface->call("Previous"); delete iface; }
 }
 
 void MprisManager::seek(qlonglong offsetUs) {
     auto *iface = playerInterface();
-    if (iface) iface->call("Seek", offsetUs);
+    if (iface) { iface->call("Seek", offsetUs); delete iface; }
 }
 
 void MprisManager::setPosition(qlonglong positionUs) {
     auto *iface = playerInterface();
-    if (iface) iface->call("SetPosition", QDBusObjectPath(trackId_), positionUs);
+    if (iface) { iface->call("SetPosition", QDBusObjectPath(trackId_), positionUs); delete iface; }
 }
 
 bool MprisManager::isSpotify() const {
@@ -240,9 +277,9 @@ QString MprisManager::serviceName() const {
 
 QDBusInterface *MprisManager::playerInterface() {
     if (currentPlayer_.isEmpty()) return nullptr;
-    // Create a temporary interface (caller should not cache)
-    return new QDBusInterface(serviceName(), "/org/mpris/MediaPlayer2",
-                              kPlayerInterface, QDBusConnection::sessionBus(), this);
+    // Caller must delete after use
+    return new QDBusInterface(serviceName(), QStringLiteral("/org/mpris/MediaPlayer2"),
+                              kPlayerInterface, QDBusConnection::sessionBus());
 }
 
 } // namespace ciderdeck

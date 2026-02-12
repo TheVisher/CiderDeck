@@ -6,6 +6,7 @@ Card {
     property string sizeClass: parent ? parent.sizeClass : "small"
 
     readonly property bool isVertical: height > width
+    property real currentBrightness: brightnessService.brightness / 100
 
     Column {
         anchors.fill: parent
@@ -24,7 +25,7 @@ Card {
                 font.pixelSize: 18
             }
             Text {
-                text: brightnessService.brightness + "%"
+                text: Math.round(brightnessTile.currentBrightness * 100) + "%"
                 color: themeManager.textColor
                 font.pixelSize: 14
                 font.weight: Font.DemiBold
@@ -37,35 +38,65 @@ Card {
             height: parent.height - (brightnessTile.sizeClass !== "tiny" ? 30 : 0)
 
             Rectangle {
+                id: sliderTrack
                 anchors.centerIn: parent
-                width: brightnessTile.isVertical ? 6 : parent.width - 20
-                height: brightnessTile.isVertical ? parent.height - 20 : 6
-                radius: 3
+                width: brightnessTile.isVertical ? 8 : parent.width - 20
+                height: brightnessTile.isVertical ? parent.height - 20 : 8
+                radius: 4
                 color: themeManager.borderColor
 
                 Rectangle {
                     width: brightnessTile.isVertical ? parent.width
-                           : parent.width * (brightnessService.brightness / 100)
+                           : parent.width * brightnessTile.currentBrightness
                     height: brightnessTile.isVertical
-                            ? parent.height * (brightnessService.brightness / 100)
+                            ? parent.height * brightnessTile.currentBrightness
                             : parent.height
-                    radius: 3
+                    radius: 4
                     color: "#FFD54F"
                     anchors.left: brightnessTile.isVertical ? parent.left : undefined
                     anchors.bottom: brightnessTile.isVertical ? parent.bottom : undefined
+                }
+
+                // Thumb indicator
+                Rectangle {
+                    width: brightnessTile.isVertical ? 20 : 16
+                    height: brightnessTile.isVertical ? 16 : 20
+                    radius: 8
+                    color: "white"
+                    border.width: 1
+                    border.color: themeManager.borderColor
+                    x: brightnessTile.isVertical
+                       ? (parent.width - width) / 2
+                       : parent.width * brightnessTile.currentBrightness - width / 2
+                    y: brightnessTile.isVertical
+                       ? parent.height * (1 - brightnessTile.currentBrightness) - height / 2
+                       : (parent.height - height) / 2
                 }
             }
 
             MouseArea {
                 anchors.fill: parent
-                onPositionChanged: (mouse) => {
+                preventStealing: true
+
+                function updateBrightness(mouse) {
                     let percent
                     if (brightnessTile.isVertical) {
-                        percent = 100 * (1 - mouse.y / height)
+                        let trackTop = sliderTrack.y
+                        let trackH = sliderTrack.height
+                        percent = 1 - ((mouse.y - trackTop) / trackH)
                     } else {
-                        percent = 100 * (mouse.x / width)
+                        let trackLeft = sliderTrack.x
+                        let trackW = sliderTrack.width
+                        percent = (mouse.x - trackLeft) / trackW
                     }
-                    brightnessService.setBrightness(Math.round(Math.max(1, Math.min(100, percent))))
+                    percent = Math.max(0.01, Math.min(1, percent))
+                    brightnessTile.currentBrightness = percent
+                    brightnessService.setBrightness(Math.round(percent * 100))
+                }
+
+                onPressed: (mouse) => updateBrightness(mouse)
+                onPositionChanged: (mouse) => {
+                    if (pressed) updateBrightness(mouse)
                 }
             }
         }

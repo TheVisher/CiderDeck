@@ -12,8 +12,11 @@ Rectangle {
                    themeManager.backgroundColor.g,
                    themeManager.backgroundColor.b,
                    cardOpacity)
-    border.width: cardOpacity > 0.05 ? 1 : 0
+    border.width: cardOpacity > 0.02 ? 1 : 0
     border.color: themeManager.borderColor
+
+    // Clip children to rounded corners
+    clip: true
 
     layer.enabled: cardOpacity > 0.05
     layer.effect: DropShadow {

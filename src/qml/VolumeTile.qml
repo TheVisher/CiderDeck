@@ -7,32 +7,46 @@ Card {
     property var settings: parent ? parent.settings : ({})
 
     readonly property bool isVertical: height > width
-    property real currentVolume: 0.75
+    // Read from the actual default sink volume (0-100+)
+    readonly property real currentVolume: audioManager ? audioManager.defaultVolume / 100 : 0.75
+    readonly property bool isMuted: audioManager ? audioManager.defaultMuted : false
 
     Column {
         anchors.fill: parent
         anchors.margins: 10
         spacing: 6
 
-        Text {
-            text: "Volume"
-            color: themeManager.textColor
-            font.pixelSize: 12
-            font.weight: Font.DemiBold
-            visible: volumeTile.sizeClass !== "tiny"
-        }
-
-        Text {
-            text: Math.round(volumeTile.currentVolume * 100) + "%"
-            color: themeManager.secondaryTextColor
-            font.pixelSize: 11
-            visible: volumeTile.sizeClass !== "tiny"
+        // Header row: icon + label + percentage
+        Row {
             anchors.horizontalCenter: parent.horizontalCenter
+            spacing: 6
+            visible: volumeTile.sizeClass !== "tiny"
+
+            Text {
+                text: volumeTile.isMuted ? "\uD83D\uDD07" : "\uD83D\uDD0A"
+                color: themeManager.textColor
+                font.pixelSize: 16
+
+                MouseArea {
+                    anchors.fill: parent
+                    anchors.margins: -6
+                    onClicked: {
+                        if (audioManager) audioManager.setDefaultMuted(!volumeTile.isMuted)
+                    }
+                }
+            }
+
+            Text {
+                text: Math.round(volumeTile.currentVolume * 100) + "%"
+                color: volumeTile.isMuted ? themeManager.secondaryTextColor : themeManager.textColor
+                font.pixelSize: 14
+                font.weight: Font.DemiBold
+            }
         }
 
         Item {
             width: parent.width
-            height: parent.height - (volumeTile.sizeClass !== "tiny" ? 44 : 0)
+            height: parent.height - (volumeTile.sizeClass !== "tiny" ? 36 : 0)
 
             Rectangle {
                 id: sliderTrack
@@ -43,10 +57,13 @@ Card {
                 color: themeManager.borderColor
 
                 Rectangle {
-                    width: volumeTile.isVertical ? parent.width : parent.width * volumeTile.currentVolume
-                    height: volumeTile.isVertical ? parent.height * volumeTile.currentVolume : parent.height
+                    width: volumeTile.isVertical ? parent.width
+                           : parent.width * Math.min(volumeTile.currentVolume, 1)
+                    height: volumeTile.isVertical
+                            ? parent.height * Math.min(volumeTile.currentVolume, 1)
+                            : parent.height
                     radius: 4
-                    color: themeManager.accentColor
+                    color: volumeTile.isMuted ? themeManager.secondaryTextColor : themeManager.accentColor
                     anchors.left: volumeTile.isVertical ? parent.left : undefined
                     anchors.bottom: volumeTile.isVertical ? parent.bottom : undefined
                 }
@@ -61,9 +78,9 @@ Card {
                     border.color: themeManager.borderColor
                     x: volumeTile.isVertical
                        ? (parent.width - width) / 2
-                       : parent.width * volumeTile.currentVolume - width / 2
+                       : parent.width * Math.min(volumeTile.currentVolume, 1) - width / 2
                     y: volumeTile.isVertical
-                       ? parent.height * (1 - volumeTile.currentVolume) - height / 2
+                       ? parent.height * (1 - Math.min(volumeTile.currentVolume, 1)) - height / 2
                        : (parent.height - height) / 2
                 }
             }
@@ -84,10 +101,9 @@ Card {
                         percent = (mouse.x - trackLeft) / trackW
                     }
                     percent = Math.max(0, Math.min(1, percent))
-                    volumeTile.currentVolume = percent
 
                     if (audioManager) {
-                        audioManager.setSinkVolume(0, Math.round(percent * 100))
+                        audioManager.setDefaultVolume(Math.round(percent * 100))
                     }
                 }
 

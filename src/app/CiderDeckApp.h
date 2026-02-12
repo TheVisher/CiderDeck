@@ -27,6 +27,8 @@ class KWinDBusClient;
 class TileGridModel;
 class EditModeController;
 class ToastModel;
+class InstalledAppsModel;
+class AppFilterModel;
 
 class CiderDeckApp : public QObject {
     Q_OBJECT
@@ -59,6 +61,8 @@ private:
     TileGridModel *tileGridModel_ = nullptr;
     EditModeController *editController_ = nullptr;
     ToastModel *toastModel_ = nullptr;
+    InstalledAppsModel *installedApps_ = nullptr;
+    AppFilterModel *appFilterModel_ = nullptr;
 };
 
 } // namespace ciderdeck

@@ -13,7 +13,9 @@ int main(int argc, char *argv[]) {
 
     QApplication app(argc, argv);
     app.setApplicationName("ciderdeck");
+    app.setApplicationDisplayName("CiderDeck");
     app.setOrganizationName("ciderdeck");
+    app.setDesktopFileName("ciderdeck");
     app.setQuitOnLastWindowClosed(false);
 
     ciderdeck::CiderDeckApp deckApp;

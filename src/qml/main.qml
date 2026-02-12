@@ -38,6 +38,37 @@ Window {
         }
     }
 
+    // Edit mode border indicator
+    Rectangle {
+        anchors.fill: parent
+        color: "transparent"
+        border.width: editController.editing ? 3 : 0
+        border.color: themeManager.accentColor
+        radius: 2
+        z: 150
+        visible: editController.editing
+
+        // "Editing" badge top-center
+        Rectangle {
+            anchors.top: parent.top
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.topMargin: 4
+            width: editLabel.width + 24
+            height: 26
+            radius: 13
+            color: themeManager.accentColor
+
+            Text {
+                id: editLabel
+                anchors.centerIn: parent
+                text: "Editing — tap empty space to exit"
+                color: "white"
+                font.pixelSize: 12
+                font.weight: Font.DemiBold
+            }
+        }
+    }
+
     // Dashboard page
     DashboardPage {
         id: dashboard

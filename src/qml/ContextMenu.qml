@@ -63,6 +63,14 @@ Menu {
     }
 
     MenuItem {
+        text: "Delete Page"
+        enabled: deckConfig.pageCount > 1
+        onTriggered: {
+            deckConfig.removePage(deckConfig.currentPage)
+        }
+    }
+
+    MenuItem {
         text: "App Settings"
         onTriggered: {
             settingsPanel.openGeneral()

@@ -99,7 +99,7 @@ Flickable {
             RowLayout {
                 spacing: 8
                 Slider {
-                    from: 0.1; to: 1; stepSize: 0.05
+                    from: 0; to: 1; stepSize: 0.05
                     value: deckConfig.globalOpacity
                     onMoved: deckConfig.globalOpacity = value
                     implicitWidth: 140

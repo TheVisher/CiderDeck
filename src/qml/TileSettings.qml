@@ -102,18 +102,148 @@ Flickable {
                 font.bold: true
             }
 
+            // App picker with search
             SettingsRow {
-                label: "Desktop file"
-                TextField {
-                    text: tileSettings.settings.desktopFile || ""
-                    placeholderText: "e.g. firefox.desktop"
-                    onEditingFinished: tileSettings.saveSetting("desktopFile", text)
-                    implicitWidth: 180
-                    color: themeManager.textColor
-                    background: Rectangle {
-                        implicitHeight: 28; radius: 6; color: "transparent"
-                        border.width: 1; border.color: themeManager.borderColor
+                label: "Application"
+                RowLayout {
+                    spacing: 6
+
+                    Text {
+                        text: tileSettings.settings.desktopFile || "None selected"
+                        color: tileSettings.settings.desktopFile ? themeManager.textColor : themeManager.secondaryTextColor
+                        font.pixelSize: 12
+                        Layout.fillWidth: true
+                        elide: Text.ElideRight
                     }
+
+                    Button {
+                        text: "Browse..."
+                        onClicked: appPickerPopup.open()
+                        contentItem: Text {
+                            text: parent.text
+                            color: themeManager.textColor
+                            font.pixelSize: 12
+                            horizontalAlignment: Text.AlignHCenter
+                        }
+                        background: Rectangle {
+                            implicitWidth: 70; implicitHeight: 26; radius: 6
+                            color: parent.hovered ? themeManager.overlayColor : "transparent"
+                            border.width: 1; border.color: themeManager.borderColor
+                        }
+                    }
+                }
+            }
+
+            // App picker popup
+            Popup {
+                id: appPickerPopup
+                parent: Overlay.overlay
+                anchors.centerIn: parent
+                width: 340
+                height: 420
+                modal: true
+                focus: true
+
+                background: Rectangle {
+                    color: themeManager.backgroundColor
+                    border.width: 1
+                    border.color: themeManager.borderColor
+                    radius: 12
+                }
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 12
+                    spacing: 8
+
+                    Text {
+                        text: "Select Application"
+                        color: themeManager.textColor
+                        font.pixelSize: 15
+                        font.bold: true
+                    }
+
+                    TextField {
+                        id: appSearchField
+                        Layout.fillWidth: true
+                        placeholderText: "Search apps..."
+                        color: themeManager.textColor
+                        onTextChanged: appFilterModel.filterText = text
+                        background: Rectangle {
+                            implicitHeight: 32; radius: 6
+                            color: "transparent"
+                            border.width: 1; border.color: themeManager.borderColor
+                        }
+
+                        Component.onCompleted: forceActiveFocus()
+                    }
+
+                    ListView {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        clip: true
+                        model: appFilterModel
+
+                        delegate: Rectangle {
+                            width: ListView.view.width
+                            height: 36
+                            color: appMouseArea.containsMouse ? themeManager.overlayColor : "transparent"
+                            radius: 6
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 8
+                                anchors.rightMargin: 8
+                                spacing: 8
+
+                                Image {
+                                    source: appIcon ? "image://appicon/" + appIcon : ""
+                                    sourceSize.width: 22
+                                    sourceSize.height: 22
+                                    width: 22; height: 22
+                                    visible: source !== ""
+                                }
+
+                                Text {
+                                    text: appName
+                                    color: themeManager.textColor
+                                    font.pixelSize: 13
+                                    Layout.fillWidth: true
+                                    elide: Text.ElideRight
+                                }
+
+                                Text {
+                                    text: desktopFile
+                                    color: themeManager.secondaryTextColor
+                                    font.pixelSize: 10
+                                    elide: Text.ElideRight
+                                    Layout.maximumWidth: 100
+                                }
+                            }
+
+                            MouseArea {
+                                id: appMouseArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                onClicked: {
+                                    tileSettings.saveSetting("desktopFile", desktopFile)
+                                    // Also set the label to the app name if label is empty
+                                    if (!tileSettings.tileData.label) {
+                                        tileSettings.saveProperty("label", appName)
+                                    }
+                                    appPickerPopup.close()
+                                    appSearchField.text = ""
+                                }
+                            }
+                        }
+
+                        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                    }
+                }
+
+                onClosed: {
+                    appSearchField.text = ""
+                    appFilterModel.filterText = ""
                 }
             }
 

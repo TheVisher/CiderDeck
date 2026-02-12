@@ -75,6 +75,8 @@ add_executable(ciderdeck
   src/viewmodels/EditModeController.cpp
   src/viewmodels/ToastModel.h
   src/viewmodels/ToastModel.cpp
+  src/viewmodels/InstalledAppsModel.h
+  src/viewmodels/InstalledAppsModel.cpp
 
   src/qml/qml.qrc
 )

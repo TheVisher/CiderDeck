@@ -36,6 +36,7 @@
 #include "viewmodels/TileGridModel.h"
 #include "viewmodels/EditModeController.h"
 #include "viewmodels/ToastModel.h"
+#include "viewmodels/InstalledAppsModel.h"
 
 namespace ciderdeck {
 
@@ -68,6 +69,9 @@ int CiderDeckApp::run(QApplication &app) {
     tileGridModel_ = new TileGridModel(config_, this);
     editController_ = new EditModeController(config_, tileGridModel_, this);
     toastModel_ = new ToastModel(this);
+    installedApps_ = new InstalledAppsModel(this);
+    appFilterModel_ = new AppFilterModel(this);
+    appFilterModel_->setSourceModel(installedApps_);
 
     engine_ = new QQmlApplicationEngine(this);
 
@@ -98,6 +102,8 @@ int CiderDeckApp::run(QApplication &app) {
     ctx->setContextProperty("tileGridModel", tileGridModel_);
     ctx->setContextProperty("editController", editController_);
     ctx->setContextProperty("toastModel", toastModel_);
+    ctx->setContextProperty("installedAppsModel", installedApps_);
+    ctx->setContextProperty("appFilterModel", appFilterModel_);
 
     wireSignals();
 

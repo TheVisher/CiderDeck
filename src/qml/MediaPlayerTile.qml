@@ -54,6 +54,8 @@ Card {
             text: "\u23EE"
             color: themeManager.textColor
             font.pixelSize: 36
+            verticalAlignment: Text.AlignVCenter
+            height: 48
             opacity: mprisManager.canGoPrevious ? 1.0 : 0.3
             MouseArea {
                 anchors.fill: parent
@@ -65,6 +67,8 @@ Card {
             text: mprisManager.playbackStatus === "Playing" ? "\u23F8" : "\u25B6"
             color: themeManager.textColor
             font.pixelSize: 48
+            verticalAlignment: Text.AlignVCenter
+            height: 48
             MouseArea {
                 anchors.fill: parent
                 anchors.margins: -8
@@ -75,6 +79,8 @@ Card {
             text: "\u23ED"
             color: themeManager.textColor
             font.pixelSize: 36
+            verticalAlignment: Text.AlignVCenter
+            height: 48
             opacity: mprisManager.canGoNext ? 1.0 : 0.3
             MouseArea {
                 anchors.fill: parent
@@ -194,6 +200,8 @@ Card {
                 text: "\u23EE"
                 color: themeManager.textColor
                 font.pixelSize: 36
+                verticalAlignment: Text.AlignVCenter
+                height: 48
                 opacity: mprisManager.canGoPrevious ? 1.0 : 0.3
                 MouseArea {
                     anchors.fill: parent
@@ -205,6 +213,8 @@ Card {
                 text: mprisManager.playbackStatus === "Playing" ? "\u23F8" : "\u25B6"
                 color: themeManager.textColor
                 font.pixelSize: 48
+                verticalAlignment: Text.AlignVCenter
+                height: 48
                 MouseArea {
                     anchors.fill: parent
                     anchors.margins: -12
@@ -215,6 +225,8 @@ Card {
                 text: "\u23ED"
                 color: themeManager.textColor
                 font.pixelSize: 36
+                verticalAlignment: Text.AlignVCenter
+                height: 48
                 opacity: mprisManager.canGoNext ? 1.0 : 0.3
                 MouseArea {
                     anchors.fill: parent
