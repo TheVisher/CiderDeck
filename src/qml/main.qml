@@ -4,7 +4,7 @@ import QtQuick.Window
 Window {
     id: root
 
-    visible: true
+    visible: false
     color: "transparent"
     flags: Qt.FramelessWindowHint | Qt.WindowStaysOnBottomHint
 

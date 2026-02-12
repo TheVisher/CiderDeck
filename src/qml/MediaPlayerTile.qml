@@ -11,16 +11,18 @@ Card {
         anchors.fill: parent
         source: mprisManager.artUrl || ""
         fillMode: Image.PreserveAspectCrop
-        opacity: 0.2
+        opacity: 0.3
         visible: source !== "" && mediaTile.sizeClass !== "tiny"
+    }
 
-        Rectangle {
-            anchors.fill: parent
-            radius: mediaTile.radius
-            color: Qt.rgba(themeManager.backgroundColor.r,
-                           themeManager.backgroundColor.g,
-                           themeManager.backgroundColor.b, 0.6)
-        }
+    // Dimming overlay on background art
+    Rectangle {
+        anchors.fill: parent
+        radius: mediaTile.radius
+        color: Qt.rgba(themeManager.backgroundColor.r,
+                       themeManager.backgroundColor.g,
+                       themeManager.backgroundColor.b, 0.5)
+        visible: mprisManager.artUrl !== "" && mediaTile.sizeClass !== "tiny"
     }
 
     // Tiny: just play/pause button
@@ -42,49 +44,62 @@ Card {
         }
     }
 
-    // Small: transport controls
+    // Small: transport controls only (centered, large buttons)
     Row {
         anchors.centerIn: parent
-        spacing: 16
+        spacing: Math.min(parent.width * 0.12, 32)
         visible: mediaTile.sizeClass === "small"
 
         Text {
             text: "\u23EE"
             color: themeManager.textColor
-            font.pixelSize: 20
+            font.pixelSize: 36
             opacity: mprisManager.canGoPrevious ? 1.0 : 0.3
-            MouseArea { anchors.fill: parent; onClicked: mprisManager.previous() }
+            MouseArea {
+                anchors.fill: parent
+                anchors.margins: -8
+                onClicked: mprisManager.previous()
+            }
         }
         Text {
             text: mprisManager.playbackStatus === "Playing" ? "\u23F8" : "\u25B6"
             color: themeManager.textColor
-            font.pixelSize: 28
-            MouseArea { anchors.fill: parent; onClicked: mprisManager.playPause() }
+            font.pixelSize: 48
+            MouseArea {
+                anchors.fill: parent
+                anchors.margins: -8
+                onClicked: mprisManager.playPause()
+            }
         }
         Text {
             text: "\u23ED"
             color: themeManager.textColor
-            font.pixelSize: 20
+            font.pixelSize: 36
             opacity: mprisManager.canGoNext ? 1.0 : 0.3
-            MouseArea { anchors.fill: parent; onClicked: mprisManager.next() }
+            MouseArea {
+                anchors.fill: parent
+                anchors.margins: -8
+                onClicked: mprisManager.next()
+            }
         }
     }
 
-    // Medium/Large: full player
-    Column {
+    // Medium/Large: info at top, controls at bottom
+    Item {
         anchors.fill: parent
         anchors.margins: 12
-        spacing: 8
         visible: mediaTile.sizeClass === "medium" || mediaTile.sizeClass === "large"
 
-        // Album art + info row
+        // Top: Album art + info
         Row {
+            id: infoRow
+            anchors.top: parent.top
             width: parent.width
             spacing: 12
 
             Image {
                 id: albumArt
-                width: mediaTile.sizeClass === "large" ? 80 : 48
+                width: mediaTile.sizeClass === "large" ? 80 : 56
                 height: width
                 source: mprisManager.artUrl || ""
                 fillMode: Image.PreserveAspectCrop
@@ -100,14 +115,14 @@ Card {
             }
 
             Column {
-                width: parent.width - albumArt.width - 12
+                width: parent.width - (albumArt.visible ? albumArt.width + 12 : 0)
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 2
 
                 Text {
                     text: mprisManager.title || "No track"
                     color: themeManager.textColor
-                    font.pixelSize: 14
+                    font.pixelSize: 15
                     font.weight: Font.DemiBold
                     elide: Text.ElideRight
                     width: parent.width
@@ -115,7 +130,7 @@ Card {
                 Text {
                     text: mprisManager.artist || ""
                     color: themeManager.secondaryTextColor
-                    font.pixelSize: 12
+                    font.pixelSize: 13
                     elide: Text.ElideRight
                     width: parent.width
                     visible: text !== ""
@@ -131,11 +146,14 @@ Card {
             }
         }
 
-        // Progress bar (large only)
+        // Progress bar
         Item {
+            id: progressBar
+            anchors.bottom: transportRow.top
+            anchors.bottomMargin: 8
             width: parent.width
-            height: 20
-            visible: mediaTile.sizeClass === "large" && mprisManager.duration > 0
+            height: 16
+            visible: mprisManager.duration > 0
 
             Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
@@ -165,30 +183,44 @@ Card {
             }
         }
 
-        // Transport controls
+        // Bottom: Transport controls — large and spread out
         Row {
+            id: transportRow
+            anchors.bottom: parent.bottom
             anchors.horizontalCenter: parent.horizontalCenter
-            spacing: 20
+            spacing: Math.min(parent.width * 0.15, 48)
 
             Text {
                 text: "\u23EE"
                 color: themeManager.textColor
-                font.pixelSize: 22
+                font.pixelSize: 36
                 opacity: mprisManager.canGoPrevious ? 1.0 : 0.3
-                MouseArea { anchors.fill: parent; onClicked: mprisManager.previous() }
+                MouseArea {
+                    anchors.fill: parent
+                    anchors.margins: -12
+                    onClicked: mprisManager.previous()
+                }
             }
             Text {
                 text: mprisManager.playbackStatus === "Playing" ? "\u23F8" : "\u25B6"
                 color: themeManager.textColor
-                font.pixelSize: 30
-                MouseArea { anchors.fill: parent; onClicked: mprisManager.playPause() }
+                font.pixelSize: 48
+                MouseArea {
+                    anchors.fill: parent
+                    anchors.margins: -12
+                    onClicked: mprisManager.playPause()
+                }
             }
             Text {
                 text: "\u23ED"
                 color: themeManager.textColor
-                font.pixelSize: 22
+                font.pixelSize: 36
                 opacity: mprisManager.canGoNext ? 1.0 : 0.3
-                MouseArea { anchors.fill: parent; onClicked: mprisManager.next() }
+                MouseArea {
+                    anchors.fill: parent
+                    anchors.margins: -12
+                    onClicked: mprisManager.next()
+                }
             }
         }
     }

@@ -113,8 +113,9 @@ int CiderDeckApp::run(QApplication &app) {
         auto *window = qobject_cast<QWindow *>(obj);
         if (window) {
             configureWindow(window);
+            window->setVisible(true);
         }
-    }, Qt::QueuedConnection);
+    });
 
     engine_->load(url);
     if (engine_->rootObjects().isEmpty()) {
@@ -199,7 +200,7 @@ void CiderDeckApp::configureWindow(QWindow *window) {
             | LayerShellQt::Window::AnchorBottom
             | LayerShellQt::Window::AnchorLeft
             | LayerShellQt::Window::AnchorRight));
-        lw->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
+        lw->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityOnDemand);
         lw->setExclusiveZone(-1);
         lw->setScope(QStringLiteral("ciderdeck"));
 

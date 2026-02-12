@@ -12,19 +12,6 @@ Item {
 
     visible: editMode
 
-    // Jiggle animation
-    SequentialAnimation on rotation {
-        running: overlay.editMode
-        loops: Animation.Infinite
-        NumberAnimation { from: -1.5; to: 1.5; duration: 150 + Math.random() * 50; easing.type: Easing.InOutSine }
-        NumberAnimation { from: 1.5; to: -1.5; duration: 150 + Math.random() * 50; easing.type: Easing.InOutSine }
-    }
-
-    // Reset rotation when edit mode ends
-    onEditModeChanged: {
-        if (!editMode) rotation = 0
-    }
-
     // Delete button (top-left)
     Rectangle {
         id: deleteButton

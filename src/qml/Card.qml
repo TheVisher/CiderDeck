@@ -4,15 +4,18 @@ import Qt5Compat.GraphicalEffects
 Rectangle {
     id: card
 
+    // Card opacity only affects the background, not contents
+    readonly property real cardOpacity: parent ? (parent.cardOpacity !== undefined ? parent.cardOpacity : deckConfig.globalOpacity) : deckConfig.globalOpacity
+
     radius: deckConfig.cardRadius
     color: Qt.rgba(themeManager.backgroundColor.r,
                    themeManager.backgroundColor.g,
                    themeManager.backgroundColor.b,
-                   deckConfig.globalOpacity)
-    border.width: 1
+                   cardOpacity)
+    border.width: cardOpacity > 0.05 ? 1 : 0
     border.color: themeManager.borderColor
 
-    layer.enabled: true
+    layer.enabled: cardOpacity > 0.05
     layer.effect: DropShadow {
         transparentBorder: true
         horizontalOffset: 0

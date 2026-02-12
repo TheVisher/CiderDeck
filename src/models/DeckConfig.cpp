@@ -284,7 +284,35 @@ void DeckConfig::ensureDefaultPage() {
         PageData page;
         page.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
         page.name = QStringLiteral("Page 1");
+
+        // Add starter tiles so the dashboard isn't empty on first launch
+        {
+            TileData clock;
+            clock.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+            clock.type = TileType::ClockDate;
+            clock.col = 0; clock.row = 0; clock.colSpan = 6; clock.rowSpan = 4;
+            clock.label = QStringLiteral("Clock");
+            page.tiles.append(clock);
+        }
+        {
+            TileData sysmon;
+            sysmon.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+            sysmon.type = TileType::SystemMonitor;
+            sysmon.col = 7; sysmon.row = 0; sysmon.colSpan = 6; sysmon.rowSpan = 4;
+            sysmon.label = QStringLiteral("System");
+            page.tiles.append(sysmon);
+        }
+        {
+            TileData weather;
+            weather.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+            weather.type = TileType::Weather;
+            weather.col = 14; weather.row = 0; weather.colSpan = 6; weather.rowSpan = 4;
+            weather.label = QStringLiteral("Weather");
+            page.tiles.append(weather);
+        }
+
         pages_.append(page);
+        save();
     }
 }
 

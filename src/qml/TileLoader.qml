@@ -28,8 +28,8 @@ Item {
     width: cellWidth * colSpanValue + gridGap * (colSpanValue - 1)
     height: cellHeight * rowSpanValue + gridGap * (rowSpanValue - 1)
 
-    // Effective opacity (use tile-specific or global)
-    opacity: tileOpacityValue >= 0 ? tileOpacityValue : deckConfig.globalOpacity
+    // Tile-specific opacity (passed to Card background, NOT the whole tile)
+    readonly property real effectiveOpacity: tileOpacityValue >= 0 ? tileOpacityValue : deckConfig.globalOpacity
 
     // Size class for adaptive tiles
     readonly property string sizeClass: {
@@ -83,6 +83,7 @@ Item {
         property string sizeClass: tileLoader.sizeClass
         property real tileWidth: tileLoader.width
         property real tileHeight: tileLoader.height
+        property real cardOpacity: tileLoader.effectiveOpacity
     }
 
     // Edit overlay
