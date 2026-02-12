@@ -89,14 +89,13 @@ Item {
         }
     }
 
-    // Stubs for future tile types (Phase 3+4)
-    Component { id: mediaPlayerComponent;    Card { Text { anchors.centerIn: parent; text: "Media Player"; color: themeManager.textColor } } }
-    Component { id: volumeComponent;         Card { Text { anchors.centerIn: parent; text: "Volume"; color: themeManager.textColor } } }
-    Component { id: weatherComponent;        Card { Text { anchors.centerIn: parent; text: "Weather"; color: themeManager.textColor } } }
-    Component { id: systemMonitorComponent;  Card { Text { anchors.centerIn: parent; text: "System Monitor"; color: themeManager.textColor } } }
-    Component { id: processManagerComponent; Card { Text { anchors.centerIn: parent; text: "Processes"; color: themeManager.textColor } } }
-    Component { id: screenshotComponent;     Card { Text { anchors.centerIn: parent; text: "Screenshot"; color: themeManager.textColor } } }
-    Component { id: brightnessComponent;     Card { Text { anchors.centerIn: parent; text: "Brightness"; color: themeManager.textColor } } }
-    Component { id: clipboardComponent;      Card { Text { anchors.centerIn: parent; text: "Clipboard"; color: themeManager.textColor } } }
-    Component { id: timerComponent;          Card { Text { anchors.centerIn: parent; text: "Timer"; color: themeManager.textColor } } }
+    Component { id: mediaPlayerComponent;    MediaPlayerTile {} }
+    Component { id: volumeComponent;         VolumeTile {} }
+    Component { id: weatherComponent;        WeatherTile {} }
+    Component { id: systemMonitorComponent;  SystemMonitorTile {} }
+    Component { id: processManagerComponent; ProcessManagerTile {} }
+    Component { id: screenshotComponent;     ScreenshotTile {} }
+    Component { id: brightnessComponent;     BrightnessTile {} }
+    Component { id: clipboardComponent;      ClipboardHistoryTile {} }
+    Component { id: timerComponent;          TimerStopwatchTile {} }
 }

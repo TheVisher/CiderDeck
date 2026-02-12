@@ -48,9 +48,31 @@ add_executable(ciderdeck
   src/services/CommandRunner.cpp
   src/services/AppLaunchManager.h
   src/services/AppLaunchManager.cpp
+  src/services/AudioManager.h
+  src/services/AudioManager.cpp
+  src/services/MprisManager.h
+  src/services/MprisManager.cpp
+  src/services/WeatherService.h
+  src/services/WeatherService.cpp
+  src/services/SystemMonitorService.h
+  src/services/SystemMonitorService.cpp
+  src/services/ProcessManagerService.h
+  src/services/ProcessManagerService.cpp
+  src/services/ScreenshotService.h
+  src/services/ScreenshotService.cpp
+  src/services/BrightnessService.h
+  src/services/BrightnessService.cpp
+  src/services/ClipboardService.h
+  src/services/ClipboardService.cpp
+  src/services/TimerService.h
+  src/services/TimerService.cpp
 
   src/viewmodels/TileGridModel.h
   src/viewmodels/TileGridModel.cpp
+  src/viewmodels/EditModeController.h
+  src/viewmodels/EditModeController.cpp
+  src/viewmodels/ToastModel.h
+  src/viewmodels/ToastModel.cpp
 
   src/qml/qml.qrc
 )

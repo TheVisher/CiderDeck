@@ -5,8 +5,23 @@
         <file>TileLoader.qml</file>
         <file>Card.qml</file>
         <file>CardButton.qml</file>
+        <file>EditOverlay.qml</file>
+        <file>Toast.qml</file>
+        <file>ToastStack.qml</file>
+        <file>PageSwipeView.qml</file>
+        <file>PageDots.qml</file>
+        <file>ContextMenu.qml</file>
         <file>ClockDateTile.qml</file>
         <file>AppLauncherTile.qml</file>
         <file>CommandButtonTile.qml</file>
+        <file>MediaPlayerTile.qml</file>
+        <file>VolumeTile.qml</file>
+        <file>WeatherTile.qml</file>
+        <file>SystemMonitorTile.qml</file>
+        <file>ProcessManagerTile.qml</file>
+        <file>ScreenshotTile.qml</file>
+        <file>BrightnessTile.qml</file>
+        <file>ClipboardHistoryTile.qml</file>
+        <file>TimerStopwatchTile.qml</file>
     </qresource>
 </RCC>

@@ -23,7 +23,18 @@
 #include "services/AppIconProvider.h"
 #include "services/CommandRunner.h"
 #include "services/AppLaunchManager.h"
+#include "services/AudioManager.h"
+#include "services/MprisManager.h"
+#include "services/WeatherService.h"
+#include "services/SystemMonitorService.h"
+#include "services/ProcessManagerService.h"
+#include "services/ScreenshotService.h"
+#include "services/BrightnessService.h"
+#include "services/ClipboardService.h"
+#include "services/TimerService.h"
 #include "viewmodels/TileGridModel.h"
+#include "viewmodels/EditModeController.h"
+#include "viewmodels/ToastModel.h"
 
 namespace ciderdeck {
 
@@ -31,12 +42,28 @@ CiderDeckApp::CiderDeckApp(QObject *parent)
     : QObject(parent) {}
 
 int CiderDeckApp::run(QApplication &app) {
+    // Core
     config_ = new DeckConfig(this);
     monitorManager_ = new MonitorManager(this);
     themeManager_ = new ThemeManager(config_, this);
+
+    // Services
     commandRunner_ = new CommandRunner(this);
     appLaunchManager_ = new AppLaunchManager(this);
+    audioManager_ = new AudioManager(this);
+    mprisManager_ = new MprisManager(this);
+    weatherService_ = new WeatherService(this);
+    systemMonitor_ = new SystemMonitorService(this);
+    processManager_ = new ProcessManagerService(this);
+    screenshotService_ = new ScreenshotService(this);
+    brightnessService_ = new BrightnessService(this);
+    clipboardService_ = new ClipboardService(this);
+    timerService_ = new TimerService(this);
+
+    // ViewModels
     tileGridModel_ = new TileGridModel(config_, this);
+    editController_ = new EditModeController(config_, tileGridModel_, this);
+    toastModel_ = new ToastModel(this);
 
     engine_ = new QQmlApplicationEngine(this);
 
@@ -54,7 +81,18 @@ int CiderDeckApp::run(QApplication &app) {
     ctx->setContextProperty("themeManager", themeManager_);
     ctx->setContextProperty("commandRunner", commandRunner_);
     ctx->setContextProperty("appLaunchManager", appLaunchManager_);
+    ctx->setContextProperty("audioManager", audioManager_);
+    ctx->setContextProperty("mprisManager", mprisManager_);
+    ctx->setContextProperty("weatherService", weatherService_);
+    ctx->setContextProperty("systemMonitor", systemMonitor_);
+    ctx->setContextProperty("processManager", processManager_);
+    ctx->setContextProperty("screenshotService", screenshotService_);
+    ctx->setContextProperty("brightnessService", brightnessService_);
+    ctx->setContextProperty("clipboardService", clipboardService_);
+    ctx->setContextProperty("timerService", timerService_);
     ctx->setContextProperty("tileGridModel", tileGridModel_);
+    ctx->setContextProperty("editController", editController_);
+    ctx->setContextProperty("toastModel", toastModel_);
 
     wireSignals();
 
@@ -85,12 +123,33 @@ void CiderDeckApp::wireSignals() {
     QObject::connect(config_, &DeckConfig::currentPageChanged, tileGridModel_, [this]() {
         tileGridModel_->setCurrentPage(config_->currentPage());
     });
+
+    // Wire toast undo actions
+    QObject::connect(toastModel_, &ToastModel::actionTriggered, this, [this](const QString &actionId) {
+        if (actionId.startsWith("undo_delete")) {
+            editController_->undoDelete();
+        } else if (actionId == "timer_add_5") {
+            timerService_->addTime(5 * 60);
+        } else if (actionId == "timer_add_10") {
+            timerService_->addTime(10 * 60);
+        }
+    });
+
+    // Timer finished toast
+    QObject::connect(timerService_, &TimerService::finished, this, [this]() {
+        toastModel_->showWithAction("Timer finished!", "Add 5min", "timer_add_5", 10000);
+    });
+
+    // Screenshot saved toast
+    QObject::connect(screenshotService_, &ScreenshotService::screenshotSaved, this, [this](const QString &path) {
+        Q_UNUSED(path)
+        toastModel_->show("Screenshot saved", 4000);
+    });
 }
 
 void CiderDeckApp::configureWindow(QWindow *window) {
     if (!window) return;
 
-    // Target the Xeneon Edge display (2560x720) or fallback to configured display
     QScreen *targetScreen = nullptr;
     if (!config_->targetDisplay().isEmpty()) {
         targetScreen = monitorManager_->findByName(config_->targetDisplay());
