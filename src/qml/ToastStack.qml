@@ -3,9 +3,9 @@ import QtQuick
 Item {
     id: toastStack
 
-    anchors.bottom: parent.bottom
+    anchors.top: parent.top
     anchors.horizontalCenter: parent.horizontalCenter
-    anchors.bottomMargin: 16
+    anchors.topMargin: 16
     width: parent.width
     height: toastColumn.height
 
@@ -18,17 +18,13 @@ Item {
             model: toastModel
 
             delegate: Toast {
-                required property string toastId
-                required property string message
-                required property string actionLabel
+                toastId: model.toastId
+                message: model.message
+                actionLabel: model.actionLabel
+                anchors.horizontalCenter: parent ? parent.horizontalCenter : undefined
 
-                toastId: toastId
-                message: message
-                actionLabel: actionLabel
-                anchors.horizontalCenter: parent.horizontalCenter
-
-                onActionClicked: toastModel.triggerAction(toastId)
-                onDismissed: toastModel.dismiss(toastId)
+                onActionClicked: toastModel.triggerAction(model.toastId)
+                onDismissed: toastModel.dismiss(model.toastId)
             }
         }
     }

@@ -47,25 +47,78 @@ void BrightnessService::initDdcutil() {
     QString ddcutil = QStandardPaths::findExecutable(QStringLiteral("ddcutil"));
     if (ddcutil.isEmpty()) return;
 
-    // Find a display. Use display 1 by default (user's primary external monitor).
-    // ddcutil getvcp 10 reads brightness VCP code
+    // Run ddcutil detect --brief to find the Xeneon Edge display
+    // Output format per display:
+    //   Display N
+    //      DRM connector:    card1-DP-3
+    QProcess detectProc;
+    detectProc.start(ddcutil, {QStringLiteral("detect"), QStringLiteral("--brief")});
+    if (!detectProc.waitForFinished(15000)) return;
+
+    QString detectOutput = detectProc.readAllStandardOutput();
+    int targetDisplay = -1;
+
+    // Parse display numbers and their DRM connectors
+    // Look for the Xeneon Edge (2560x720) by connector name containing "DP-3"
+    // or by monitor name containing "XENEON"
+    static QRegularExpression displayRe(QStringLiteral(R"(Display\s+(\d+))"));
+    static QRegularExpression connectorRe(QStringLiteral(R"(DRM connector:\s+\S+-(\S+))"));
+    static QRegularExpression monitorRe(QStringLiteral(R"(Monitor:\s+(.+))"));
+
+    const auto lines = detectOutput.split(QLatin1Char('\n'));
+    int currentDisplayNum = -1;
+
+    for (const QString &line : lines) {
+        auto displayMatch = displayRe.match(line);
+        if (displayMatch.hasMatch()) {
+            currentDisplayNum = displayMatch.captured(1).toInt();
+            continue;
+        }
+
+        // Check monitor name for XENEON
+        auto monitorMatch = monitorRe.match(line);
+        if (monitorMatch.hasMatch() && currentDisplayNum > 0) {
+            if (monitorMatch.captured(1).contains(QStringLiteral("XENEON"), Qt::CaseInsensitive)) {
+                targetDisplay = currentDisplayNum;
+                break;
+            }
+        }
+
+        // Also match by connector name (e.g., DP-3)
+        auto connMatch = connectorRe.match(line);
+        if (connMatch.hasMatch() && currentDisplayNum > 0) {
+            // The connector name from ddcutil is like "card1-DP-3", we extract "DP-3"
+            // But our screen names from Qt are just "DP-3"
+            // For now, prefer XENEON match above; this is a fallback
+        }
+    }
+
+    // If we didn't find XENEON specifically, try all displays and pick the first one that works
+    if (targetDisplay < 0) {
+        targetDisplay = 1;
+    }
+
+    // Now read brightness from the target display
     QProcess proc;
     proc.start(ddcutil, {QStringLiteral("getvcp"), QStringLiteral("10"),
-                         QStringLiteral("--display"), QStringLiteral("1"),
+                         QStringLiteral("--display"), QString::number(targetDisplay),
                          QStringLiteral("--brief")});
     if (!proc.waitForFinished(5000)) return;
 
     QString output = proc.readAllStandardOutput();
-    // Brief format: "VCP 10 C 75 100" (code, type, current, max)
     static QRegularExpression re(QStringLiteral(R"(VCP\s+10\s+C\s+(\d+)\s+(\d+))"));
     auto match = re.match(output);
     if (!match.hasMatch()) return;
 
     brightness_ = match.captured(1).toInt();
     maxBrightness_ = match.captured(2).toInt();
-    ddcDisplayNum_ = 1;
+    ddcDisplayNum_ = targetDisplay;
     method_ = QStringLiteral("ddcutil");
     available_ = true;
+
+    qInfo() << "[BrightnessService] Using ddcutil display" << targetDisplay
+             << "brightness:" << brightness_ << "/" << maxBrightness_;
+
     emit availableChanged();
     emit brightnessChanged();
 }

@@ -152,10 +152,12 @@ void CiderDeckApp::wireSignals() {
         toastModel_->showWithAction("Timer finished!", "Add 5min", "timer_add_5", 10000);
     });
 
-    // Screenshot saved toast
+    // Screenshot toasts
     QObject::connect(screenshotService_, &ScreenshotService::screenshotSaved, this, [this](const QString &path) {
-        Q_UNUSED(path)
-        toastModel_->show("Screenshot saved", 4000);
+        toastModel_->show(QStringLiteral("Screenshot saved to ") + path, 5000);
+    });
+    QObject::connect(screenshotService_, &ScreenshotService::screenshotFailed, this, [this](const QString &error) {
+        toastModel_->show(QStringLiteral("Screenshot failed: ") + error, 4000);
     });
 
     // KWin bridge errors

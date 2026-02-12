@@ -12,10 +12,52 @@
 namespace ciderdeck {
 
 AppLaunchManager::AppLaunchManager(QObject *parent)
-    : QObject(parent) {}
+    : QObject(parent) {
+    moveTimer_ = new QTimer(this);
+    moveTimer_->setInterval(500);
+    connect(moveTimer_, &QTimer::timeout, this, [this]() {
+        if (pendingMoves_.isEmpty()) {
+            moveTimer_->stop();
+            return;
+        }
+        // Request fresh window list to check for new windows
+        if (kwinClient_) {
+            kwinClient_->requestWindowList();
+        }
+    });
+}
 
 void AppLaunchManager::setKWinClient(KWinDBusClient *client) {
     kwinClient_ = client;
+    if (kwinClient_) {
+        connect(kwinClient_, &KWinDBusClient::windowsChanged, this, &AppLaunchManager::onWindowsChanged);
+    }
+}
+
+void AppLaunchManager::onWindowsChanged() {
+    if (pendingMoves_.isEmpty()) return;
+
+    QMutableListIterator<PendingMove> it(pendingMoves_);
+    while (it.hasNext()) {
+        auto &pending = it.next();
+        pending.retries++;
+
+        QString windowId = kwinClient_->findWindowByClass(pending.wmClass);
+        if (!windowId.isEmpty()) {
+            qInfo() << "[AppLaunchManager] Moving new window" << pending.wmClass
+                     << "to" << pending.targetMonitor;
+            kwinClient_->moveWindowToScreen(windowId, pending.targetMonitor);
+            it.remove();
+        } else if (pending.retries > 20) {
+            // Give up after ~10 seconds
+            qWarning() << "[AppLaunchManager] Timed out waiting for window" << pending.wmClass;
+            it.remove();
+        }
+    }
+
+    if (pendingMoves_.isEmpty()) {
+        moveTimer_->stop();
+    }
 }
 
 void AppLaunchManager::launch(const QString &desktopFile, const QString &command,
@@ -25,7 +67,6 @@ void AppLaunchManager::launch(const QString &desktopFile, const QString &command
         auto entry = parseDesktopFile(desktopFile);
         QString wmClass = entry.wmClass;
         if (wmClass.isEmpty()) {
-            // Fallback: use desktop file name without .desktop as wmClass guess
             wmClass = desktopFile;
             wmClass.remove(QStringLiteral(".desktop"));
             if (wmClass.contains(QLatin1Char('/'))) {
@@ -35,7 +76,6 @@ void AppLaunchManager::launch(const QString &desktopFile, const QString &command
 
         QString windowId = kwinClient_->findWindowByClass(wmClass);
         if (!windowId.isEmpty()) {
-            // Window found — activate it and optionally move to target monitor
             if (!targetMonitor.isEmpty()) {
                 kwinClient_->moveWindowToScreen(windowId, targetMonitor);
             } else {
@@ -46,43 +86,59 @@ void AppLaunchManager::launch(const QString &desktopFile, const QString &command
         }
     }
 
+    // Determine wmClass for post-launch window targeting
+    QString wmClass;
+    if (!targetMonitor.isEmpty() && kwinClient_ && !desktopFile.isEmpty()) {
+        auto entry = parseDesktopFile(desktopFile);
+        wmClass = entry.wmClass;
+        if (wmClass.isEmpty()) {
+            wmClass = desktopFile;
+            wmClass.remove(QStringLiteral(".desktop"));
+            if (wmClass.contains(QLatin1Char('/'))) {
+                wmClass = wmClass.mid(wmClass.lastIndexOf(QLatin1Char('/')) + 1);
+            }
+        }
+    }
+
+    bool ok = false;
+
     // If explicit command, use it directly
     if (!command.isEmpty()) {
-        bool ok = QProcess::startDetached(QStringLiteral("/bin/sh"), {QStringLiteral("-c"), command});
-        if (ok) {
-            emit launched(desktopFile);
-        } else {
-            emit launchFailed(desktopFile, QStringLiteral("Failed to start command"));
-        }
-        return;
-    }
-
-    // If desktop file is a full path, parse and launch the Exec line
-    if (desktopFile.contains(QLatin1Char('/'))) {
+        ok = QProcess::startDetached(QStringLiteral("/bin/sh"), {QStringLiteral("-c"), command});
+    } else if (desktopFile.contains(QLatin1Char('/'))) {
+        // If desktop file is a full path, parse and launch the Exec line
         auto entry = parseDesktopFile(desktopFile);
         if (!entry.exec.isEmpty()) {
-            // Strip field codes like %u %U %f %F from Exec
             QString exec = entry.exec;
             exec.remove(QRegularExpression(QStringLiteral("\\s+%[uUfFdDnNickvm]")));
-            bool ok = QProcess::startDetached(QStringLiteral("/bin/sh"), {QStringLiteral("-c"), exec});
-            if (ok) {
-                emit launched(desktopFile);
-            } else {
-                emit launchFailed(desktopFile, QStringLiteral("Failed to start application"));
-            }
-            return;
+            ok = QProcess::startDetached(QStringLiteral("/bin/sh"), {QStringLiteral("-c"), exec});
         }
+    } else {
+        // Use gtk-launch for simple desktop file names
+        QString name = desktopFile;
+        name.remove(QStringLiteral(".desktop"));
+        ok = QProcess::startDetached(QStringLiteral("gtk-launch"), {name});
     }
 
-    // Use gtk-launch for simple desktop file names
-    QString name = desktopFile;
-    name.remove(QStringLiteral(".desktop"));
-
-    bool ok = QProcess::startDetached(QStringLiteral("gtk-launch"), {name});
     if (ok) {
         emit launched(desktopFile);
+
+        // Queue a pending move if we have a target monitor
+        if (!targetMonitor.isEmpty() && !wmClass.isEmpty() && kwinClient_) {
+            PendingMove pending;
+            pending.wmClass = wmClass;
+            pending.targetMonitor = targetMonitor;
+            pending.retries = 0;
+            pendingMoves_.append(pending);
+
+            if (!moveTimer_->isActive()) {
+                moveTimer_->start();
+            }
+            // Request an immediate window list check
+            kwinClient_->requestWindowList();
+        }
     } else {
-        emit launchFailed(desktopFile, QStringLiteral("gtk-launch failed"));
+        emit launchFailed(desktopFile, QStringLiteral("Failed to start application"));
     }
 }
 
@@ -99,7 +155,6 @@ QString AppLaunchManager::appNameForDesktop(const QString &desktopFile) const {
 QString AppLaunchManager::wmClassForDesktop(const QString &desktopFile) const {
     auto entry = parseDesktopFile(desktopFile);
     if (!entry.wmClass.isEmpty()) return entry.wmClass;
-    // Fallback: derive from desktop file name
     QString name = desktopFile;
     name.remove(QStringLiteral(".desktop"));
     if (name.contains(QLatin1Char('/'))) {
@@ -112,7 +167,6 @@ AppLaunchManager::DesktopEntry AppLaunchManager::parseDesktopFile(const QString 
     DesktopEntry entry;
     QString path = desktopFile;
 
-    // If not a full path, find it
     if (!desktopFile.contains(QLatin1Char('/'))) {
         path = findDesktopFilePath(desktopFile);
     }

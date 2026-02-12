@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QTimer>
 
 namespace ciderdeck {
 
@@ -33,8 +34,19 @@ signals:
     void launchFailed(const QString &desktopFile, const QString &error);
 
 private:
+    void onWindowsChanged();
     QString findDesktopFilePath(const QString &desktopFile) const;
+
     KWinDBusClient *kwinClient_ = nullptr;
+
+    // Pending move: after launching, watch for the new window and move it
+    struct PendingMove {
+        QString wmClass;
+        QString targetMonitor;
+        int retries = 0;
+    };
+    QList<PendingMove> pendingMoves_;
+    QTimer *moveTimer_ = nullptr;
 };
 
 } // namespace ciderdeck
