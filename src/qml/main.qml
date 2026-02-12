@@ -8,14 +8,9 @@ Window {
     color: "transparent"
     flags: Qt.FramelessWindowHint | Qt.WindowStaysOnBottomHint
 
-    width: Screen.width
-    height: Screen.height
-    x: Screen.virtualX
-    y: Screen.virtualY
-
     title: "CiderDeck"
 
-    // Grid math helpers
+    // Grid math helpers — use actual window size (set by layer-shell or C++)
     readonly property int gridColumns: deckConfig.gridColumns
     readonly property int gridRows: deckConfig.gridRows
     readonly property int gridGap: deckConfig.gridGap

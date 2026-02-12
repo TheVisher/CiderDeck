@@ -166,12 +166,28 @@ void CiderDeckApp::configureWindow(QWindow *window) {
     QScreen *targetScreen = nullptr;
     if (!config_->targetDisplay().isEmpty()) {
         targetScreen = monitorManager_->findByName(config_->targetDisplay());
+        if (targetScreen) {
+            qInfo() << "[CiderDeckApp] Found target display by name:" << config_->targetDisplay();
+        }
     }
     if (!targetScreen) {
         targetScreen = monitorManager_->findByResolution(2560, 720);
+        if (targetScreen) {
+            qInfo() << "[CiderDeckApp] Found Xeneon Edge by resolution:" << targetScreen->name()
+                     << targetScreen->geometry();
+        }
     }
+
     if (targetScreen) {
         window->setScreen(targetScreen);
+        window->setGeometry(targetScreen->geometry());
+        qInfo() << "[CiderDeckApp] Window placed on:" << targetScreen->name()
+                 << "geometry:" << targetScreen->geometry();
+    } else {
+        qWarning() << "[CiderDeckApp] No target screen found, using default. Available screens:";
+        for (auto *s : QGuiApplication::screens()) {
+            qWarning() << "  " << s->name() << s->size() << s->geometry();
+        }
     }
 
 #ifdef HAVE_LAYERSHELLQT
@@ -187,7 +203,7 @@ void CiderDeckApp::configureWindow(QWindow *window) {
         lw->setExclusiveZone(-1);
         lw->setScope(QStringLiteral("ciderdeck"));
 
-        qInfo() << "[CiderDeckApp] Layer-shell configured: LayerBottom, no keyboard interactivity";
+        qInfo() << "[CiderDeckApp] Layer-shell configured on" << (targetScreen ? targetScreen->name() : "default");
     }
 #endif
 
