@@ -132,3 +132,5 @@ endif()
 
 install(TARGETS ciderdeck RUNTIME DESTINATION bin)
 install(FILES ciderdeck.desktop DESTINATION share/applications)
+install(FILES ciderdeck.desktop DESTINATION "${CMAKE_INSTALL_PREFIX}/share/autostart" OPTIONAL)
+install(FILES kwin-scripts/ciderdeck-bridge.js DESTINATION "${CMAKE_INSTALL_PREFIX}/share/ciderdeck/kwin-scripts")

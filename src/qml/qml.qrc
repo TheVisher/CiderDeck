@@ -23,5 +23,9 @@
         <file>BrightnessTile.qml</file>
         <file>ClipboardHistoryTile.qml</file>
         <file>TimerStopwatchTile.qml</file>
+        <file>SettingsPanel.qml</file>
+        <file>GeneralSettings.qml</file>
+        <file>TileSettings.qml</file>
+        <file>SettingsRow.qml</file>
     </qresource>
 </RCC>

@@ -96,7 +96,7 @@ public:
     Q_INVOKABLE void resizeTile(const QString &tileId, int colSpan, int rowSpan);
 
     const QList<PageData> &pages() const { return pages_; }
-    QString configPath() const;
+    Q_INVOKABLE QString configPath() const;
 
 signals:
     void gridChanged();

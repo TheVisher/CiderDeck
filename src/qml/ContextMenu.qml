@@ -13,7 +13,7 @@ Menu {
         visible: contextMenu.onTile
         height: visible ? implicitHeight : 0
         onTriggered: {
-            // TODO: Open tile settings panel
+            settingsPanel.openTile(contextMenu.targetTileId)
         }
     }
 
@@ -65,7 +65,7 @@ Menu {
     MenuItem {
         text: "App Settings"
         onTriggered: {
-            // TODO: Open settings panel
+            settingsPanel.openGeneral()
         }
     }
 }

@@ -38,6 +38,7 @@ public:
     Q_INVOKABLE bool checkCollision(int col, int row, int colSpan, int rowSpan,
                                      const QString &excludeId = QString()) const;
     Q_INVOKABLE QVariantMap findFreePosition(int colSpan, int rowSpan) const;
+    Q_INVOKABLE QVariantMap getTileById(const QString &tileId) const;
 
 signals:
     void currentPageChanged();

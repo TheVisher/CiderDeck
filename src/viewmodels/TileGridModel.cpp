@@ -110,4 +110,14 @@ QVariantMap TileGridModel::findFreePosition(int colSpan, int rowSpan) const {
     return {};
 }
 
+QVariantMap TileGridModel::getTileById(const QString &tileId) const {
+    for (const auto &v : tiles_) {
+        const auto tile = v.toMap();
+        if (tile["id"].toString() == tileId) {
+            return tile;
+        }
+    }
+    return {};
+}
+
 } // namespace ciderdeck

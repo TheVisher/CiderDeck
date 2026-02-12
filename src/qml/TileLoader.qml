@@ -39,6 +39,20 @@ Item {
         return "large"
     }
 
+    // Right-click context menu on tile
+    MouseArea {
+        anchors.fill: parent
+        acceptedButtons: Qt.RightButton
+        z: 1
+        onClicked: (mouse) => {
+            if (mouse.button === Qt.RightButton) {
+                contextMenu.targetTileId = tileLoader.tileIdValue
+                let globalPos = mapToItem(null, mouse.x, mouse.y)
+                contextMenu.popup(globalPos.x, globalPos.y)
+            }
+        }
+    }
+
     Loader {
         id: contentLoader
         anchors.fill: parent
@@ -69,6 +83,17 @@ Item {
         property string sizeClass: tileLoader.sizeClass
         property real tileWidth: tileLoader.width
         property real tileHeight: tileLoader.height
+    }
+
+    // Edit overlay
+    EditOverlay {
+        anchors.fill: parent
+        editMode: editController.editing
+        tileId: tileLoader.tileIdValue
+        colValue: tileLoader.colValue
+        rowValue: tileLoader.rowValue
+        colSpanValue: tileLoader.colSpanValue
+        rowSpanValue: tileLoader.rowSpanValue
     }
 
     // Tile type components

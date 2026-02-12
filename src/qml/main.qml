@@ -90,4 +90,10 @@ Window {
     ContextMenu {
         id: contextMenu
     }
+
+    // Settings panel
+    SettingsPanel {
+        id: settingsPanel
+        z: 300
+    }
 }
