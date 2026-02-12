@@ -63,14 +63,6 @@ Item {
         id: contentLoader
         anchors.fill: parent
 
-        // Content scaling: scale from center
-        transform: Scale {
-            origin.x: contentLoader.width / 2
-            origin.y: contentLoader.height / 2
-            xScale: tileLoader.contentScaleValue
-            yScale: tileLoader.contentScaleValue
-        }
-
         sourceComponent: {
             switch (tileLoader.tileTypeValue) {
             case "clock_date":      return clockDateComponent
@@ -98,6 +90,7 @@ Item {
         property real tileWidth: tileLoader.width
         property real tileHeight: tileLoader.height
         property real cardOpacity: tileLoader.effectiveOpacity
+        property real contentScale: tileLoader.contentScaleValue
     }
 
     // Edit overlay

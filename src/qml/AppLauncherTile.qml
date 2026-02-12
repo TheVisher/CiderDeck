@@ -7,6 +7,7 @@ CardButton {
     property var settings: parent ? parent.settings : ({})
     property string label: parent ? parent.label : ""
     property bool showLabel: parent ? parent.showLabel : true
+    readonly property real contentScale: parent ? (parent.contentScale || 1.0) : 1.0
 
     readonly property string desktopFile: settings.desktopFile || ""
     readonly property string command: settings.command || ""
@@ -59,11 +60,13 @@ CardButton {
             visible: source !== ""
 
             readonly property int iconSize: {
+                var base
                 switch (appTile.sizeClass) {
-                case "tiny":  return Math.min(appTile.width, appTile.height) * 0.5
-                case "small": return Math.min(appTile.width, appTile.height) * 0.4
-                default:      return Math.min(appTile.width, appTile.height) * 0.35
+                case "tiny":  base = Math.min(appTile.width, appTile.height) * 0.5; break
+                case "small": base = Math.min(appTile.width, appTile.height) * 0.4; break
+                default:      base = Math.min(appTile.width, appTile.height) * 0.35; break
                 }
+                return base * appTile.contentScale
             }
         }
 
@@ -71,7 +74,7 @@ CardButton {
             anchors.horizontalCenter: parent.horizontalCenter
             text: appTile.label
             color: themeManager.textColor
-            font.pixelSize: 13
+            font.pixelSize: 13 * appTile.contentScale
             visible: appTile.showLabel && appTile.sizeClass !== "tiny" && appTile.label !== ""
             elide: Text.ElideRight
             width: appTile.width - 16

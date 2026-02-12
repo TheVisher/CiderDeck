@@ -90,13 +90,14 @@ Flickable {
             RowLayout {
                 spacing: 8
                 Slider {
+                    id: contentScaleSlider
                     from: 0.5; to: 2.0; stepSize: 0.05
-                    value: tileSettings.settings.contentScale || 1.0
+                    value: tileSettings.settings.contentScale !== undefined ? tileSettings.settings.contentScale : 1.0
                     onMoved: tileSettings.saveSetting("contentScale", Math.round(value * 100) / 100)
                     implicitWidth: 140
                 }
                 Text {
-                    text: Math.round((tileSettings.settings.contentScale || 1.0) * 100) + "%"
+                    text: Math.round(contentScaleSlider.value * 100) + "%"
                     color: themeManager.secondaryTextColor
                     font.pixelSize: 12
                 }
@@ -409,6 +410,28 @@ Flickable {
                         implicitHeight: 28; radius: 6; color: "transparent"
                         border.width: 1; border.color: themeManager.borderColor
                     }
+                }
+            }
+        }
+
+        // Volume
+        ColumnLayout {
+            spacing: 10
+            visible: tileSettings.tileType === "volume"
+            Layout.fillWidth: true
+
+            Text {
+                text: "Volume"
+                color: themeManager.accentColor
+                font.pixelSize: 14
+                font.bold: true
+            }
+
+            SettingsRow {
+                label: "Show percent sign"
+                Switch {
+                    checked: tileSettings.settings.showPercent !== false
+                    onToggled: tileSettings.saveSetting("showPercent", checked)
                 }
             }
         }

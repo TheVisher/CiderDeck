@@ -5,31 +5,44 @@ Card {
 
     property string sizeClass: parent ? parent.sizeClass : "small"
     property var settings: parent ? parent.settings : ({})
+    readonly property real contentScale: parent ? (parent.contentScale || 1.0) : 1.0
 
     readonly property bool isVertical: height > width
     // Read from the actual default sink volume (0-100+)
     readonly property real currentVolume: audioManager ? audioManager.defaultVolume / 100 : 0.75
     readonly property bool isMuted: audioManager ? audioManager.defaultMuted : false
+    readonly property bool showPercent: settings.showPercent !== false  // default true
 
     Column {
         anchors.fill: parent
         anchors.margins: 10
         spacing: 6
 
-        // Header row: icon + label + percentage
+        // Header row: mute button + sink name + percentage
         Row {
             anchors.horizontalCenter: parent.horizontalCenter
-            spacing: 6
+            spacing: 8
             visible: volumeTile.sizeClass !== "tiny"
 
-            Text {
-                text: volumeTile.isMuted ? "\uD83D\uDD07" : "\uD83D\uDD0A"
-                color: themeManager.textColor
-                font.pixelSize: 16
+            // Mute button — larger tap target
+            Rectangle {
+                width: 32 * volumeTile.contentScale
+                height: 32 * volumeTile.contentScale
+                radius: width / 2
+                color: muteArea.containsMouse ? themeManager.overlayColor : "transparent"
+                anchors.verticalCenter: parent.verticalCenter
+
+                Text {
+                    anchors.centerIn: parent
+                    text: volumeTile.isMuted ? "\uD83D\uDD07" : "\uD83D\uDD0A"
+                    font.pixelSize: 16 * volumeTile.contentScale
+                }
 
                 MouseArea {
+                    id: muteArea
                     anchors.fill: parent
-                    anchors.margins: -6
+                    anchors.margins: -4
+                    hoverEnabled: true
                     onClicked: {
                         if (audioManager) audioManager.setDefaultMuted(!volumeTile.isMuted)
                     }
@@ -37,10 +50,25 @@ Card {
             }
 
             Text {
-                text: Math.round(volumeTile.currentVolume * 100) + "%"
+                text: {
+                    var val = Math.round(volumeTile.currentVolume * 100)
+                    return volumeTile.showPercent ? val + "%" : String(val)
+                }
                 color: volumeTile.isMuted ? themeManager.secondaryTextColor : themeManager.textColor
-                font.pixelSize: 14
+                font.pixelSize: 14 * volumeTile.contentScale
                 font.weight: Font.DemiBold
+                anchors.verticalCenter: parent.verticalCenter
+            }
+
+            // Sink name (medium+ only)
+            Text {
+                text: audioManager ? audioManager.defaultSinkName : ""
+                color: themeManager.secondaryTextColor
+                font.pixelSize: 10 * volumeTile.contentScale
+                visible: volumeTile.sizeClass === "medium" || volumeTile.sizeClass === "large"
+                elide: Text.ElideRight
+                width: Math.max(0, volumeTile.width - 120)
+                anchors.verticalCenter: parent.verticalCenter
             }
         }
 

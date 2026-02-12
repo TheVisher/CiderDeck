@@ -5,6 +5,7 @@ Card {
 
     property string sizeClass: parent ? parent.sizeClass : "small"
     property var settings: parent ? parent.settings : ({})
+    readonly property real contentScale: parent ? (parent.contentScale || 1.0) : 1.0
 
     Connections {
         target: timerService
@@ -22,11 +23,13 @@ Card {
             text: timerService.displayTime
             color: themeManager.textColor
             font.pixelSize: {
+                var base
                 switch (timerTile.sizeClass) {
-                case "tiny":  return Math.min(timerTile.width, timerTile.height) * 0.3
-                case "small": return 28
-                default:      return 36
+                case "tiny":  base = Math.min(timerTile.width, timerTile.height) * 0.3; break
+                case "small": base = 28; break
+                default:      base = 36; break
                 }
+                return base * timerTile.contentScale
             }
             font.weight: Font.DemiBold
             font.family: "monospace"

@@ -114,7 +114,35 @@ if (target) {
     var outputs = workspace.screens;
     for (var i = 0; i < outputs.length; ++i) {
         if (String(outputs[i].name) === "%2") {
-            target.output = outputs[i];
+            var screen = outputs[i];
+            target.output = screen;
+
+            // If the window is on a different screen or newly opened,
+            // set geometry with padding so it doesn't fill the screen
+            var geom = screen.geometry;
+            var pad = 20;
+            var targetW = geom.width - 2 * pad;
+            var targetH = geom.height - 2 * pad;
+
+            // Only resize if the window is currently larger than the target
+            // (avoids shrinking small dialogs)
+            var fw = target.frameGeometry;
+            if (fw.width > targetW || fw.height > targetH) {
+                target.frameGeometry = Qt.rect(
+                    geom.x + pad,
+                    geom.y + pad,
+                    Math.min(fw.width, targetW),
+                    Math.min(fw.height, targetH)
+                );
+            } else {
+                // Center the window on the target screen
+                target.frameGeometry = Qt.rect(
+                    geom.x + (geom.width - fw.width) / 2,
+                    geom.y + (geom.height - fw.height) / 2,
+                    fw.width,
+                    fw.height
+                );
+            }
             break;
         }
     }

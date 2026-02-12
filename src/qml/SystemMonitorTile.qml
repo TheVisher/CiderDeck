@@ -4,6 +4,7 @@ Card {
     id: sysmonTile
 
     property string sizeClass: parent ? parent.sizeClass : "small"
+    readonly property real contentScale: parent ? (parent.contentScale || 1.0) : 1.0
 
     Column {
         anchors.centerIn: parent
@@ -17,14 +18,14 @@ Card {
             Text {
                 text: "CPU"
                 color: themeManager.secondaryTextColor
-                font.pixelSize: sysmonTile.sizeClass === "tiny" ? 9 : 11
+                font.pixelSize: (sysmonTile.sizeClass === "tiny" ? 9 : 11) * sysmonTile.contentScale
                 anchors.horizontalCenter: parent.horizontalCenter
             }
 
             Text {
                 text: systemMonitor.cpuPercent.toFixed(0) + "%"
                 color: themeManager.textColor
-                font.pixelSize: sysmonTile.sizeClass === "tiny" ? 16 : 22
+                font.pixelSize: (sysmonTile.sizeClass === "tiny" ? 16 : 22) * sysmonTile.contentScale
                 font.weight: Font.DemiBold
                 anchors.horizontalCenter: parent.horizontalCenter
             }
@@ -55,14 +56,14 @@ Card {
             Text {
                 text: "RAM"
                 color: themeManager.secondaryTextColor
-                font.pixelSize: sysmonTile.sizeClass === "tiny" ? 9 : 11
+                font.pixelSize: (sysmonTile.sizeClass === "tiny" ? 9 : 11) * sysmonTile.contentScale
                 anchors.horizontalCenter: parent.horizontalCenter
             }
 
             Text {
                 text: systemMonitor.ramPercent.toFixed(0) + "%"
                 color: themeManager.textColor
-                font.pixelSize: sysmonTile.sizeClass === "tiny" ? 16 : 22
+                font.pixelSize: (sysmonTile.sizeClass === "tiny" ? 16 : 22) * sysmonTile.contentScale
                 font.weight: Font.DemiBold
                 anchors.horizontalCenter: parent.horizontalCenter
             }
@@ -86,7 +87,7 @@ Card {
             Text {
                 text: systemMonitor.ramUsed + " / " + systemMonitor.ramTotal
                 color: themeManager.secondaryTextColor
-                font.pixelSize: 10
+                font.pixelSize: 10 * sysmonTile.contentScale
                 anchors.horizontalCenter: parent.horizontalCenter
                 visible: sysmonTile.sizeClass === "medium" || sysmonTile.sizeClass === "large"
             }

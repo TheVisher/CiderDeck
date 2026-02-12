@@ -4,6 +4,7 @@ Card {
     id: clipTile
 
     property string sizeClass: parent ? parent.sizeClass : "small"
+    readonly property real contentScale: parent ? (parent.contentScale || 1.0) : 1.0
 
     Column {
         anchors.fill: parent

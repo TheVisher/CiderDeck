@@ -4,6 +4,7 @@ Card {
     id: brightnessTile
 
     property string sizeClass: parent ? parent.sizeClass : "small"
+    readonly property real contentScale: parent ? (parent.contentScale || 1.0) : 1.0
 
     readonly property bool isVertical: height > width
 
@@ -48,12 +49,12 @@ Card {
             Text {
                 text: "\u2600"
                 color: themeManager.textColor
-                font.pixelSize: 18
+                font.pixelSize: 18 * brightnessTile.contentScale
             }
             Text {
                 text: Math.round(brightnessTile.localBrightness * 100) + "%"
                 color: themeManager.textColor
-                font.pixelSize: 14
+                font.pixelSize: 14 * brightnessTile.contentScale
                 font.weight: Font.DemiBold
             }
         }

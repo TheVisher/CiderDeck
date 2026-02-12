@@ -5,6 +5,7 @@ Card {
 
     property string sizeClass: parent ? parent.sizeClass : "small"
     property var settings: parent ? parent.settings : ({})
+    readonly property real contentScale: parent ? (parent.contentScale || 1.0) : 1.0
 
     // Clock format settings
     readonly property string timeFormat: settings.timeFormat || "12h"
@@ -37,33 +38,46 @@ Card {
 
     Column {
         anchors.centerIn: parent
+        width: parent.width - 16
         spacing: clockTile.sizeClass === "tiny" ? 0 : 4
 
         Text {
             id: timeText
             anchors.horizontalCenter: parent.horizontalCenter
+            width: parent.width
+            horizontalAlignment: Text.AlignHCenter
             color: themeManager.textColor
             font.pixelSize: {
+                var base
                 switch (clockTile.sizeClass) {
-                case "tiny":  return Math.min(clockTile.width, clockTile.height) * 0.35
-                case "small": return Math.min(clockTile.width, clockTile.height) * 0.3
-                default:      return Math.min(clockTile.width, clockTile.height) * 0.25
+                case "tiny":  base = Math.min(clockTile.width, clockTile.height) * 0.35; break
+                case "small": base = Math.min(clockTile.width, clockTile.height) * 0.3; break
+                default:      base = Math.min(clockTile.width, clockTile.height) * 0.25; break
                 }
+                return base * clockTile.contentScale
             }
             font.weight: Font.DemiBold
+            fontSizeMode: Text.HorizontalFit
+            minimumPixelSize: 10
         }
 
         Text {
             id: dateText
             anchors.horizontalCenter: parent.horizontalCenter
+            width: parent.width
+            horizontalAlignment: Text.AlignHCenter
             color: themeManager.secondaryTextColor
             visible: clockTile.sizeClass !== "tiny"
             font.pixelSize: {
+                var base
                 switch (clockTile.sizeClass) {
-                case "small": return Math.min(clockTile.width, clockTile.height) * 0.12
-                default:      return Math.min(clockTile.width, clockTile.height) * 0.1
+                case "small": base = Math.min(clockTile.width, clockTile.height) * 0.12; break
+                default:      base = Math.min(clockTile.width, clockTile.height) * 0.1; break
                 }
+                return base * clockTile.contentScale
             }
+            fontSizeMode: Text.HorizontalFit
+            minimumPixelSize: 8
         }
     }
 }

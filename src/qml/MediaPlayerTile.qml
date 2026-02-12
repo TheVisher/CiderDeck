@@ -5,6 +5,7 @@ Card {
 
     property string sizeClass: parent ? parent.sizeClass : "small"
     property var settings: parent ? parent.settings : ({})
+    readonly property real contentScale: parent ? (parent.contentScale || 1.0) : 1.0
 
     // Album art background (dimmed)
     Image {
@@ -128,7 +129,7 @@ Card {
                 Text {
                     text: mprisManager.title || "No track"
                     color: themeManager.textColor
-                    font.pixelSize: 15
+                    font.pixelSize: 15 * mediaTile.contentScale
                     font.weight: Font.DemiBold
                     elide: Text.ElideRight
                     width: parent.width
@@ -136,7 +137,7 @@ Card {
                 Text {
                     text: mprisManager.artist || ""
                     color: themeManager.secondaryTextColor
-                    font.pixelSize: 13
+                    font.pixelSize: 13 * mediaTile.contentScale
                     elide: Text.ElideRight
                     width: parent.width
                     visible: text !== ""
@@ -144,7 +145,7 @@ Card {
                 Text {
                     text: mprisManager.album || ""
                     color: themeManager.secondaryTextColor
-                    font.pixelSize: 11
+                    font.pixelSize: 11 * mediaTile.contentScale
                     elide: Text.ElideRight
                     width: parent.width
                     visible: text !== "" && mediaTile.sizeClass === "large"

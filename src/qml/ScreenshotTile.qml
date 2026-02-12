@@ -5,6 +5,7 @@ CardButton {
 
     property string sizeClass: parent ? parent.sizeClass : "small"
     property var settings: parent ? parent.settings : ({})
+    readonly property real contentScale: parent ? (parent.contentScale || 1.0) : 1.0
 
     onClicked: {
         screenshotService.captureScreen(settings.defaultMonitor || "")
@@ -30,18 +31,20 @@ CardButton {
             height: iconSize
 
             readonly property int iconSize: {
+                var base
                 switch (screenshotTile.sizeClass) {
-                case "tiny":  return Math.min(screenshotTile.width, screenshotTile.height) * 0.5
-                case "small": return Math.min(screenshotTile.width, screenshotTile.height) * 0.4
-                default:      return 40
+                case "tiny":  base = Math.min(screenshotTile.width, screenshotTile.height) * 0.5; break
+                case "small": base = Math.min(screenshotTile.width, screenshotTile.height) * 0.4; break
+                default:      base = 40; break
                 }
+                return base * screenshotTile.contentScale
             }
         }
 
         Text {
             text: "Screenshot"
             color: themeManager.textColor
-            font.pixelSize: 12
+            font.pixelSize: 12 * screenshotTile.contentScale
             visible: screenshotTile.sizeClass !== "tiny"
             anchors.horizontalCenter: parent.horizontalCenter
         }
