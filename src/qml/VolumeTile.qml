@@ -8,137 +8,226 @@ Card {
     readonly property real contentScale: parent ? (parent.contentScale || 1.0) : 1.0
 
     readonly property bool isVertical: height > width
-    // Read from the actual default sink volume (0-100+)
     readonly property real currentVolume: audioManager ? audioManager.defaultVolume / 100 : 0.75
     readonly property bool isMuted: audioManager ? audioManager.defaultMuted : false
-    readonly property bool showPercent: settings.showPercent !== false  // default true
+    readonly property bool showPercent: settings.showPercent !== false
+    readonly property bool showMuteBtn: settings.showMuteBtn !== false
 
-    Column {
+    // Vertical layout: mute at top, slider in middle, percent at bottom
+    // Horizontal layout: mute at left, slider in middle, percent at right
+    Item {
         anchors.fill: parent
-        anchors.margins: 10
-        spacing: 6
+        anchors.margins: 8
 
-        // Header row: mute button + sink name + percentage
-        Row {
-            anchors.horizontalCenter: parent.horizontalCenter
-            spacing: 8
-            visible: volumeTile.sizeClass !== "tiny"
+        // --- VERTICAL LAYOUT ---
+        Column {
+            anchors.fill: parent
+            spacing: 4
+            visible: volumeTile.isVertical
 
-            // Mute button — larger tap target
-            Rectangle {
-                width: 32 * volumeTile.contentScale
-                height: 32 * volumeTile.contentScale
-                radius: width / 2
-                color: muteArea.containsMouse ? themeManager.overlayColor : "transparent"
-                anchors.verticalCenter: parent.verticalCenter
+            // Mute button at top
+            Item {
+                width: parent.width
+                height: muteColBtn.height
+                visible: volumeTile.showMuteBtn
 
-                Text {
-                    anchors.centerIn: parent
-                    text: volumeTile.isMuted ? "\uD83D\uDD07" : "\uD83D\uDD0A"
-                    font.pixelSize: 16 * volumeTile.contentScale
+                Rectangle {
+                    id: muteColBtn
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: 32 * volumeTile.contentScale
+                    height: 32 * volumeTile.contentScale
+                    radius: width / 2
+                    color: muteColArea.containsMouse ? themeManager.overlayColor : "transparent"
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: volumeTile.isMuted ? "\uD83D\uDD07" : "\uD83D\uDD0A"
+                        font.pixelSize: 16 * volumeTile.contentScale
+                    }
+
+                    MouseArea {
+                        id: muteColArea
+                        anchors.fill: parent
+                        anchors.margins: -4
+                        hoverEnabled: true
+                        onClicked: {
+                            if (audioManager) audioManager.setDefaultMuted(!volumeTile.isMuted)
+                        }
+                    }
+                }
+            }
+
+            // Slider track (fills remaining space)
+            Item {
+                width: parent.width
+                height: parent.height
+                       - (volumeTile.showMuteBtn ? muteColBtn.height + 4 : 0)
+                       - (volumeTile.showPercent ? volPercentCol.height + 4 : 0)
+
+                Rectangle {
+                    id: vTrack
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    width: 8
+                    radius: 4
+                    color: themeManager.borderColor
+
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.bottom: parent.bottom
+                        height: parent.height * Math.min(volumeTile.currentVolume, 1)
+                        radius: 4
+                        color: volumeTile.isMuted ? themeManager.secondaryTextColor : themeManager.accentColor
+                    }
+
+                    Rectangle {
+                        width: 20
+                        height: 16
+                        radius: 8
+                        color: "white"
+                        border.width: 1
+                        border.color: themeManager.borderColor
+                        x: (parent.width - width) / 2
+                        y: parent.height * (1 - Math.min(volumeTile.currentVolume, 1)) - height / 2
+                    }
                 }
 
                 MouseArea {
-                    id: muteArea
                     anchors.fill: parent
-                    anchors.margins: -4
-                    hoverEnabled: true
-                    onClicked: {
-                        if (audioManager) audioManager.setDefaultMuted(!volumeTile.isMuted)
+                    preventStealing: true
+                    onPressed: (mouse) => updateVol(mouse)
+                    onPositionChanged: (mouse) => { if (pressed) updateVol(mouse) }
+
+                    function updateVol(mouse) {
+                        var trackTop = vTrack.y
+                        var trackH = vTrack.height
+                        var percent = 1 - ((mouse.y - trackTop) / trackH)
+                        percent = Math.max(0, Math.min(1, percent))
+                        if (audioManager) audioManager.setDefaultVolume(Math.round(percent * 100))
                     }
                 }
             }
 
+            // Percent at bottom
             Text {
+                id: volPercentCol
+                anchors.horizontalCenter: parent.horizontalCenter
+                visible: volumeTile.showPercent
                 text: {
                     var val = Math.round(volumeTile.currentVolume * 100)
-                    return volumeTile.showPercent ? val + "%" : String(val)
+                    return val + "%"
                 }
                 color: volumeTile.isMuted ? themeManager.secondaryTextColor : themeManager.textColor
-                font.pixelSize: 14 * volumeTile.contentScale
+                font.pixelSize: 13 * volumeTile.contentScale
                 font.weight: Font.DemiBold
-                anchors.verticalCenter: parent.verticalCenter
-            }
-
-            // Sink name (medium+ only)
-            Text {
-                text: audioManager ? audioManager.defaultSinkName : ""
-                color: themeManager.secondaryTextColor
-                font.pixelSize: 10 * volumeTile.contentScale
-                visible: volumeTile.sizeClass === "medium" || volumeTile.sizeClass === "large"
-                elide: Text.ElideRight
-                width: Math.max(0, volumeTile.width - 120)
-                anchors.verticalCenter: parent.verticalCenter
             }
         }
 
-        Item {
-            width: parent.width
-            height: parent.height - (volumeTile.sizeClass !== "tiny" ? 36 : 0)
+        // --- HORIZONTAL LAYOUT ---
+        Row {
+            anchors.fill: parent
+            spacing: 6
+            visible: !volumeTile.isVertical
 
-            Rectangle {
-                id: sliderTrack
-                anchors.centerIn: parent
-                width: volumeTile.isVertical ? 8 : parent.width - 20
-                height: volumeTile.isVertical ? parent.height - 20 : 8
-                radius: 4
-                color: themeManager.borderColor
+            // Mute button at left
+            Item {
+                width: muteRowBtn.width
+                height: parent.height
+                visible: volumeTile.showMuteBtn
 
                 Rectangle {
-                    width: volumeTile.isVertical ? parent.width
-                           : parent.width * Math.min(volumeTile.currentVolume, 1)
-                    height: volumeTile.isVertical
-                            ? parent.height * Math.min(volumeTile.currentVolume, 1)
-                            : parent.height
-                    radius: 4
-                    color: volumeTile.isMuted ? themeManager.secondaryTextColor : themeManager.accentColor
-                    anchors.left: volumeTile.isVertical ? parent.left : undefined
-                    anchors.bottom: volumeTile.isVertical ? parent.bottom : undefined
-                }
+                    id: muteRowBtn
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 32 * volumeTile.contentScale
+                    height: 32 * volumeTile.contentScale
+                    radius: width / 2
+                    color: muteRowArea.containsMouse ? themeManager.overlayColor : "transparent"
 
-                // Thumb indicator
-                Rectangle {
-                    width: volumeTile.isVertical ? 20 : 16
-                    height: volumeTile.isVertical ? 16 : 20
-                    radius: 8
-                    color: "white"
-                    border.width: 1
-                    border.color: themeManager.borderColor
-                    x: volumeTile.isVertical
-                       ? (parent.width - width) / 2
-                       : parent.width * Math.min(volumeTile.currentVolume, 1) - width / 2
-                    y: volumeTile.isVertical
-                       ? parent.height * (1 - Math.min(volumeTile.currentVolume, 1)) - height / 2
-                       : (parent.height - height) / 2
+                    Text {
+                        anchors.centerIn: parent
+                        text: volumeTile.isMuted ? "\uD83D\uDD07" : "\uD83D\uDD0A"
+                        font.pixelSize: 16 * volumeTile.contentScale
+                    }
+
+                    MouseArea {
+                        id: muteRowArea
+                        anchors.fill: parent
+                        anchors.margins: -4
+                        hoverEnabled: true
+                        onClicked: {
+                            if (audioManager) audioManager.setDefaultMuted(!volumeTile.isMuted)
+                        }
+                    }
                 }
             }
 
-            MouseArea {
-                anchors.fill: parent
-                preventStealing: true
+            // Slider track (fills remaining space)
+            Item {
+                width: parent.width
+                       - (volumeTile.showMuteBtn ? muteRowBtn.width + 6 : 0)
+                       - (volumeTile.showPercent ? volPercentRow.width + 6 : 0)
+                height: parent.height
 
-                function updateVolume(mouse) {
-                    let percent
-                    if (volumeTile.isVertical) {
-                        let trackTop = sliderTrack.y
-                        let trackH = sliderTrack.height
-                        percent = 1 - ((mouse.y - trackTop) / trackH)
-                    } else {
-                        let trackLeft = sliderTrack.x
-                        let trackW = sliderTrack.width
-                        percent = (mouse.x - trackLeft) / trackW
+                Rectangle {
+                    id: hTrack
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    height: 8
+                    radius: 4
+                    color: themeManager.borderColor
+
+                    Rectangle {
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        anchors.left: parent.left
+                        width: parent.width * Math.min(volumeTile.currentVolume, 1)
+                        radius: 4
+                        color: volumeTile.isMuted ? themeManager.secondaryTextColor : themeManager.accentColor
                     }
-                    percent = Math.max(0, Math.min(1, percent))
 
-                    if (audioManager) {
-                        audioManager.setDefaultVolume(Math.round(percent * 100))
+                    Rectangle {
+                        width: 16
+                        height: 20
+                        radius: 8
+                        color: "white"
+                        border.width: 1
+                        border.color: themeManager.borderColor
+                        x: parent.width * Math.min(volumeTile.currentVolume, 1) - width / 2
+                        y: (parent.height - height) / 2
                     }
                 }
 
-                onPressed: (mouse) => updateVolume(mouse)
-                onPositionChanged: (mouse) => {
-                    if (pressed) updateVolume(mouse)
+                MouseArea {
+                    anchors.fill: parent
+                    preventStealing: true
+                    onPressed: (mouse) => updateHVol(mouse)
+                    onPositionChanged: (mouse) => { if (pressed) updateHVol(mouse) }
+
+                    function updateHVol(mouse) {
+                        var trackLeft = hTrack.x
+                        var trackW = hTrack.width
+                        var percent = (mouse.x - trackLeft) / trackW
+                        percent = Math.max(0, Math.min(1, percent))
+                        if (audioManager) audioManager.setDefaultVolume(Math.round(percent * 100))
+                    }
                 }
+            }
+
+            // Percent at right
+            Text {
+                id: volPercentRow
+                anchors.verticalCenter: parent.verticalCenter
+                visible: volumeTile.showPercent
+                text: {
+                    var val = Math.round(volumeTile.currentVolume * 100)
+                    return val + "%"
+                }
+                color: volumeTile.isMuted ? themeManager.secondaryTextColor : themeManager.textColor
+                font.pixelSize: 13 * volumeTile.contentScale
+                font.weight: Font.DemiBold
             }
         }
     }

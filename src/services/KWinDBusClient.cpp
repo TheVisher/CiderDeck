@@ -36,6 +36,9 @@ function ciderdeckFindWindowById(windowId) {
     }
     return null;
 }
+function ciderdeckDebug(msg) {
+    callDBus("org.ciderdeck.App", "/CiderDeck", "org.ciderdeck.KWinBridge", "pushDebug", msg);
+}
 )JS");
 }
 
@@ -111,42 +114,46 @@ if (target) {
         scriptBody = helperFunctions() + QStringLiteral(R"JS(
 var target = ciderdeckFindWindowById("%1");
 if (target) {
+    var screenFound = false;
     var outputs = workspace.screens;
-    for (var i = 0; i < outputs.length; ++i) {
-        if (String(outputs[i].name) === "%2") {
+    var screenCount = outputs.length;
+    ciderdeckDebug("MoveToScreen: window found, screens=" + screenCount + " looking for '%2'");
+
+    for (var i = 0; i < screenCount; ++i) {
+        var sname = String(outputs[i].name);
+        ciderdeckDebug("  screen[" + i + "]: " + sname);
+        if (sname === "%2") {
             var screen = outputs[i];
-            target.output = screen;
-
-            // If the window is on a different screen or newly opened,
-            // set geometry with padding so it doesn't fill the screen
             var geom = screen.geometry;
-            var pad = 20;
-            var targetW = geom.width - 2 * pad;
-            var targetH = geom.height - 2 * pad;
 
-            // Only resize if the window is currently larger than the target
-            // (avoids shrinking small dialogs)
+            // Move the window by setting its geometry to be within the target screen
             var fw = target.frameGeometry;
-            if (fw.width > targetW || fw.height > targetH) {
-                target.frameGeometry = Qt.rect(
-                    geom.x + pad,
-                    geom.y + pad,
-                    Math.min(fw.width, targetW),
-                    Math.min(fw.height, targetH)
-                );
-            } else {
-                // Center the window on the target screen
-                target.frameGeometry = Qt.rect(
-                    geom.x + (geom.width - fw.width) / 2,
-                    geom.y + (geom.height - fw.height) / 2,
-                    fw.width,
-                    fw.height
-                );
-            }
+            var pad = 20;
+            var maxW = geom.width - 2 * pad;
+            var maxH = geom.height - 2 * pad;
+            var newW = Math.min(fw.width, maxW);
+            var newH = Math.min(fw.height, maxH);
+            var newX = geom.x + Math.round((geom.width - newW) / 2);
+            var newY = geom.y + Math.round((geom.height - newH) / 2);
+
+            // Set output first, then geometry
+            target.output = screen;
+            target.frameGeometry.x = newX;
+            target.frameGeometry.y = newY;
+            target.frameGeometry.width = newW;
+            target.frameGeometry.height = newH;
+
+            screenFound = true;
+            ciderdeckDebug("MoveToScreen: moved to " + sname + " geom=" + newX + "," + newY + " " + newW + "x" + newH);
             break;
         }
     }
+    if (!screenFound) {
+        ciderdeckDebug("MoveToScreen: screen '%2' not found among " + screenCount + " outputs");
+    }
     workspace.activeWindow = target;
+} else {
+    ciderdeckDebug("MoveToScreen: window '%1' not found");
 }
 )JS").arg(targetId, screenName);
     } else {
@@ -155,16 +162,18 @@ if (target) {
     }
 
     QTemporaryFile scriptFile(QDir::tempPath() + QStringLiteral("/ciderdeck-cmd-XXXXXX.js"));
-    scriptFile.setAutoRemove(true);
+    scriptFile.setAutoRemove(false);  // Don't auto-remove, KWin needs the file
     if (!scriptFile.open()) {
         emit bridgeError(QStringLiteral("Failed to create temporary KWin script file"));
         return false;
     }
 
+    const QString scriptPath = scriptFile.fileName();
     QTextStream stream(&scriptFile);
     stream << scriptBody;
     stream.flush();
     scriptFile.flush();
+    scriptFile.close();  // Close so KWin can read it
 
     const QString pluginName = QStringLiteral("ciderdeck-cmd-%1")
                                    .arg(QUuid::createUuid().toString(QUuid::WithoutBraces));
@@ -177,26 +186,37 @@ if (target) {
 
     if (!scripting.isValid()) {
         emit bridgeError(QStringLiteral("KWin scripting interface unavailable"));
+        QFile::remove(scriptPath);
         return false;
     }
 
-    QDBusReply<int> loadReply = scripting.call(QStringLiteral("loadScript"), scriptFile.fileName(), pluginName);
+    QDBusReply<int> loadReply = scripting.call(QStringLiteral("loadScript"), scriptPath, pluginName);
     if (!loadReply.isValid()) {
         emit bridgeError(QStringLiteral("loadScript failed: ") + loadReply.error().message());
+        QFile::remove(scriptPath);
         return false;
     }
 
     QDBusMessage startMsg = scripting.call(QStringLiteral("start"));
     if (startMsg.type() == QDBusMessage::ErrorMessage) {
         emit bridgeError(QStringLiteral("start failed: ") + startMsg.errorMessage());
-        return false;
     }
 
-    QDBusReply<bool> unloadReply = scripting.call(QStringLiteral("unloadScript"), pluginName);
-    if (!unloadReply.isValid()) {
-        emit bridgeError(QStringLiteral("unloadScript failed: ") + unloadReply.error().message());
-        return false;
-    }
+    // Don't unload immediately — give async callDBus time to complete.
+    // Schedule cleanup after a short delay via a singleShot timer.
+    const QString cleanupPlugin = pluginName;
+    const QString cleanupPath = scriptPath;
+    QTimer::singleShot(500, this, [cleanupPlugin, cleanupPath]() {
+        QDBusInterface scripting(
+            QStringLiteral("org.kde.KWin"),
+            QStringLiteral("/Scripting"),
+            QStringLiteral("org.kde.kwin.Scripting"),
+            QDBusConnection::sessionBus());
+        if (scripting.isValid()) {
+            scripting.call(QStringLiteral("unloadScript"), cleanupPlugin);
+        }
+        QFile::remove(cleanupPath);
+    });
 
     return true;
 }
@@ -222,6 +242,10 @@ void KWinDBusClient::pushWindows(const QString &jsonPayload) {
     }
 
     emit bridgeError(QStringLiteral("Malformed window payload"));
+}
+
+void KWinDBusClient::pushDebug(const QString &message) {
+    qInfo() << "[KWin Script]" << message;
 }
 
 bool KWinDBusClient::requestWindowList() {
@@ -267,6 +291,20 @@ QString KWinDBusClient::findWindowByDesktopName(const QString &desktopName) cons
 }
 
 QString KWinDBusClient::findWindowBest(const QString &wmClass, const QString &desktopName) const {
+    // Log available windows for debugging
+    if (windows_.isEmpty()) {
+        qInfo() << "[KWinDBusClient] findWindowBest: window list is empty";
+    } else {
+        qInfo() << "[KWinDBusClient] findWindowBest: searching for wmClass=" << wmClass
+                 << "desktop=" << desktopName << "in" << windows_.size() << "windows:";
+        for (const auto &val : windows_) {
+            const auto win = val.toObject();
+            qInfo() << "  " << win["resourceClass"].toString()
+                     << "desktop:" << win["desktopFile"].toString()
+                     << "caption:" << win["caption"].toString().left(40);
+        }
+    }
+
     // 1. Exact resourceClass match
     QString id = findWindowByClass(wmClass);
     if (!id.isEmpty()) return id;

@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QJsonArray>
 #include <QString>
+#include <QTimer>
 #include <QVariantList>
 
 namespace ciderdeck {
@@ -30,6 +31,7 @@ public:
 
 public slots:
     void pushWindows(const QString &jsonPayload);
+    void pushDebug(const QString &message);
 
 signals:
     void windowPayloadReceived(const QJsonArray &windows);

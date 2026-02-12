@@ -42,9 +42,16 @@ void AppLaunchManager::onWindowsChanged() {
         auto &pending = it.next();
         pending.retries++;
 
+        // Log window list on first retry to help debug matching
+        if (pending.retries == 2) {
+            qInfo() << "[AppLaunchManager] Looking for wmClass:" << pending.wmClass
+                     << "desktop:" << pending.desktopName;
+        }
+
         QString windowId = kwinClient_->findWindowBest(pending.wmClass, pending.desktopName);
         if (!windowId.isEmpty()) {
-            qInfo() << "[AppLaunchManager] Moving new window" << pending.wmClass
+            qInfo() << "[AppLaunchManager] Moving window" << windowId
+                     << "matched:" << pending.wmClass
                      << "(desktop:" << pending.desktopName << ") to" << pending.targetMonitor;
             kwinClient_->moveWindowToScreen(windowId, pending.targetMonitor);
             it.remove();
@@ -82,6 +89,8 @@ void AppLaunchManager::launch(const QString &desktopFile, const QString &command
 
     // If raiseExisting, try to find and activate an existing window first
     if (raiseExisting && kwinClient_ && !desktopFile.isEmpty()) {
+        qInfo() << "[AppLaunchManager] raiseExisting: looking for wmClass:" << wmClass
+                 << "desktop:" << desktopName;
         QString windowId = kwinClient_->findWindowBest(wmClass, desktopName);
         if (!windowId.isEmpty()) {
             if (!targetMonitor.isEmpty()) {

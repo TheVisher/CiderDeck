@@ -428,10 +428,18 @@ Flickable {
             }
 
             SettingsRow {
-                label: "Show percent sign"
+                label: "Show percent"
                 Switch {
                     checked: tileSettings.settings.showPercent !== false
                     onToggled: tileSettings.saveSetting("showPercent", checked)
+                }
+            }
+
+            SettingsRow {
+                label: "Show mute button"
+                Switch {
+                    checked: tileSettings.settings.showMuteBtn !== false
+                    onToggled: tileSettings.saveSetting("showMuteBtn", checked)
                 }
             }
         }
