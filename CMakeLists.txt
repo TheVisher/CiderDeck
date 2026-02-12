@@ -66,6 +66,8 @@ add_executable(ciderdeck
   src/services/ClipboardService.cpp
   src/services/TimerService.h
   src/services/TimerService.cpp
+  src/services/KWinDBusClient.h
+  src/services/KWinDBusClient.cpp
 
   src/viewmodels/TileGridModel.h
   src/viewmodels/TileGridModel.cpp

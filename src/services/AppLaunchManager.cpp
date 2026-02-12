@@ -1,4 +1,5 @@
 #include "AppLaunchManager.h"
+#include "KWinDBusClient.h"
 
 #include <QProcess>
 #include <QFile>
@@ -13,7 +14,38 @@ namespace ciderdeck {
 AppLaunchManager::AppLaunchManager(QObject *parent)
     : QObject(parent) {}
 
-void AppLaunchManager::launch(const QString &desktopFile, const QString &command) {
+void AppLaunchManager::setKWinClient(KWinDBusClient *client) {
+    kwinClient_ = client;
+}
+
+void AppLaunchManager::launch(const QString &desktopFile, const QString &command,
+                              const QString &targetMonitor, bool raiseExisting) {
+    // If raiseExisting, try to find and activate an existing window first
+    if (raiseExisting && kwinClient_ && !desktopFile.isEmpty()) {
+        auto entry = parseDesktopFile(desktopFile);
+        QString wmClass = entry.wmClass;
+        if (wmClass.isEmpty()) {
+            // Fallback: use desktop file name without .desktop as wmClass guess
+            wmClass = desktopFile;
+            wmClass.remove(QStringLiteral(".desktop"));
+            if (wmClass.contains(QLatin1Char('/'))) {
+                wmClass = wmClass.mid(wmClass.lastIndexOf(QLatin1Char('/')) + 1);
+            }
+        }
+
+        QString windowId = kwinClient_->findWindowByClass(wmClass);
+        if (!windowId.isEmpty()) {
+            // Window found — activate it and optionally move to target monitor
+            if (!targetMonitor.isEmpty()) {
+                kwinClient_->moveWindowToScreen(windowId, targetMonitor);
+            } else {
+                kwinClient_->activateWindowById(windowId);
+            }
+            emit launched(desktopFile);
+            return;
+        }
+    }
+
     // If explicit command, use it directly
     if (!command.isEmpty()) {
         bool ok = QProcess::startDetached(QStringLiteral("/bin/sh"), {QStringLiteral("-c"), command});
@@ -62,6 +94,18 @@ QString AppLaunchManager::iconNameForDesktop(const QString &desktopFile) const {
 QString AppLaunchManager::appNameForDesktop(const QString &desktopFile) const {
     auto entry = parseDesktopFile(desktopFile);
     return entry.name;
+}
+
+QString AppLaunchManager::wmClassForDesktop(const QString &desktopFile) const {
+    auto entry = parseDesktopFile(desktopFile);
+    if (!entry.wmClass.isEmpty()) return entry.wmClass;
+    // Fallback: derive from desktop file name
+    QString name = desktopFile;
+    name.remove(QStringLiteral(".desktop"));
+    if (name.contains(QLatin1Char('/'))) {
+        name = name.mid(name.lastIndexOf(QLatin1Char('/')) + 1);
+    }
+    return name;
 }
 
 AppLaunchManager::DesktopEntry AppLaunchManager::parseDesktopFile(const QString &desktopFile) const {

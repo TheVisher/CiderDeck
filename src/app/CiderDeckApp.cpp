@@ -32,6 +32,7 @@
 #include "services/BrightnessService.h"
 #include "services/ClipboardService.h"
 #include "services/TimerService.h"
+#include "services/KWinDBusClient.h"
 #include "viewmodels/TileGridModel.h"
 #include "viewmodels/EditModeController.h"
 #include "viewmodels/ToastModel.h"
@@ -59,6 +60,9 @@ int CiderDeckApp::run(QApplication &app) {
     brightnessService_ = new BrightnessService(this);
     clipboardService_ = new ClipboardService(this);
     timerService_ = new TimerService(this);
+    kwinClient_ = new KWinDBusClient(this);
+    kwinClient_->publishService();
+    appLaunchManager_->setKWinClient(kwinClient_);
 
     // ViewModels
     tileGridModel_ = new TileGridModel(config_, this);
@@ -90,6 +94,7 @@ int CiderDeckApp::run(QApplication &app) {
     ctx->setContextProperty("brightnessService", brightnessService_);
     ctx->setContextProperty("clipboardService", clipboardService_);
     ctx->setContextProperty("timerService", timerService_);
+    ctx->setContextProperty("kwinClient", kwinClient_);
     ctx->setContextProperty("tileGridModel", tileGridModel_);
     ctx->setContextProperty("editController", editController_);
     ctx->setContextProperty("toastModel", toastModel_);
@@ -145,6 +150,14 @@ void CiderDeckApp::wireSignals() {
         Q_UNUSED(path)
         toastModel_->show("Screenshot saved", 4000);
     });
+
+    // KWin bridge errors
+    QObject::connect(kwinClient_, &KWinDBusClient::bridgeError, this, [](const QString &msg) {
+        qWarning() << "[KWinDBusClient]" << msg;
+    });
+
+    // Request initial window list once bridge is up
+    kwinClient_->requestWindowList();
 }
 
 void CiderDeckApp::configureWindow(QWindow *window) {

@@ -4,15 +4,21 @@
 
 namespace ciderdeck {
 
+class KWinDBusClient;
+
 class AppLaunchManager : public QObject {
     Q_OBJECT
 
 public:
     explicit AppLaunchManager(QObject *parent = nullptr);
 
-    Q_INVOKABLE void launch(const QString &desktopFile, const QString &command = QString());
+    void setKWinClient(KWinDBusClient *client);
+
+    Q_INVOKABLE void launch(const QString &desktopFile, const QString &command = QString(),
+                            const QString &targetMonitor = QString(), bool raiseExisting = false);
     Q_INVOKABLE QString iconNameForDesktop(const QString &desktopFile) const;
     Q_INVOKABLE QString appNameForDesktop(const QString &desktopFile) const;
+    Q_INVOKABLE QString wmClassForDesktop(const QString &desktopFile) const;
 
     struct DesktopEntry {
         QString name;
@@ -28,6 +34,7 @@ signals:
 
 private:
     QString findDesktopFilePath(const QString &desktopFile) const;
+    KWinDBusClient *kwinClient_ = nullptr;
 };
 
 } // namespace ciderdeck

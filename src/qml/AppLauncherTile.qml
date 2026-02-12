@@ -11,6 +11,12 @@ CardButton {
     readonly property string desktopFile: settings.desktopFile || ""
     readonly property string command: settings.command || ""
     readonly property string iconOverride: settings.iconOverride || ""
+    readonly property string targetMonitor: settings.targetMonitor || ""
+    readonly property bool raiseExisting: settings.raiseExisting || false
+
+    // Resolve WM class for running indicator
+    readonly property string wmClass: desktopFile ? appLaunchManager.wmClassForDesktop(desktopFile) : ""
+    property bool isRunning: false
 
     // Resolve icon: override > desktop file icon > desktop file name
     readonly property string iconSource: {
@@ -19,8 +25,22 @@ CardButton {
         return ""
     }
 
+    function updateRunning() {
+        isRunning = wmClass !== "" && kwinClient.isAppRunning(wmClass)
+    }
+
     onClicked: {
-        appLaunchManager.launch(desktopFile, command)
+        appLaunchManager.launch(desktopFile, command, targetMonitor, raiseExisting)
+    }
+
+    Component.onCompleted: updateRunning()
+
+    // Re-evaluate isRunning when window list changes
+    Connections {
+        target: kwinClient
+        function onWindowsChanged() {
+            appTile.updateRunning()
+        }
     }
 
     Column {
@@ -57,5 +77,17 @@ CardButton {
             width: appTile.width - 16
             horizontalAlignment: Text.AlignHCenter
         }
+    }
+
+    // Running indicator dot
+    Rectangle {
+        width: 6
+        height: 6
+        radius: 3
+        color: themeManager.accentColor
+        visible: appTile.isRunning && appTile.sizeClass !== "tiny"
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 6
     }
 }

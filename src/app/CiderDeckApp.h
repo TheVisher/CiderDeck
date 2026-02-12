@@ -23,6 +23,7 @@ class ScreenshotService;
 class BrightnessService;
 class ClipboardService;
 class TimerService;
+class KWinDBusClient;
 class TileGridModel;
 class EditModeController;
 class ToastModel;
@@ -54,6 +55,7 @@ private:
     BrightnessService *brightnessService_ = nullptr;
     ClipboardService *clipboardService_ = nullptr;
     TimerService *timerService_ = nullptr;
+    KWinDBusClient *kwinClient_ = nullptr;
     TileGridModel *tileGridModel_ = nullptr;
     EditModeController *editController_ = nullptr;
     ToastModel *toastModel_ = nullptr;
