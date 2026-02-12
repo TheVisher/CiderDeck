@@ -1,0 +1,12 @@
+<RCC>
+    <qresource prefix="/src/qml">
+        <file>main.qml</file>
+        <file>DashboardPage.qml</file>
+        <file>TileLoader.qml</file>
+        <file>Card.qml</file>
+        <file>CardButton.qml</file>
+        <file>ClockDateTile.qml</file>
+        <file>AppLauncherTile.qml</file>
+        <file>CommandButtonTile.qml</file>
+    </qresource>
+</RCC>

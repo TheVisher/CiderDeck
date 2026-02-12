@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=CiderDeck
+Comment=Touch dashboard for Corsair Xeneon Edge
+Exec=ciderdeck
+Icon=ciderdeck
+Terminal=false
+Categories=Utility;
+X-KDE-autostart-phase=2

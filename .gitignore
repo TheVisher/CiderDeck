@@ -1,0 +1,12 @@
+build*/
+.cache/
+compile_commands.json
+*.o
+*.so
+*.a
+moc_*
+qrc_*
+*.autosave
+CMakeLists.txt.user
+.idea/
+.vscode/
