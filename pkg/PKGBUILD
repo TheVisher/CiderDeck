@@ -1,0 +1,51 @@
+# Maintainer: Your Name <your@email.com>
+pkgname=ciderdeck
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Touch-optimized dashboard for Corsair Xeneon Edge'
+arch=('x86_64')
+url='https://github.com/eaholum/ciderdeck'
+license=('GPL-3.0-or-later')
+depends=(
+  'qt6-base'
+  'qt6-declarative'
+  'qt6-5compat'
+)
+makedepends=(
+  'cmake'
+  'extra-cmake-modules'
+  'layer-shell-qt'
+  'kwindowsystem'
+  'kstatusnotifieritem'
+  'pulseaudio-qt'
+  'ddcutil'
+  'qt6-multimedia'
+)
+optdepends=(
+  'layer-shell-qt: layer-shell placement on Wayland'
+  'kwindowsystem: blur effects'
+  'kstatusnotifieritem: system tray integration'
+  'pulseaudio-qt: audio mixer control'
+  'ddcutil: monitor brightness via DDC/CI'
+)
+source=("${pkgname}::git+file://$(cd "${PWD}/.." && pwd)")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$pkgname"
+  local tag
+  tag=$(git describe --long --tags 2>/dev/null) &&
+    echo "$tag" | sed 's/^v//;s/-/.r/;s/-/./' ||
+    printf '0.1.0.r%s.%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+build() {
+  cmake -B build -S "$pkgname" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/usr
+  cmake --build build
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+}

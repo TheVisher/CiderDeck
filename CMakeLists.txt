@@ -26,6 +26,10 @@ find_package(KF6WindowSystem QUIET)
 find_package(KF6StatusNotifierItem QUIET)
 find_package(KF6PulseAudioQt QUIET)
 
+# libddcutil for direct DDC/CI brightness control (faster than ddcutil subprocess)
+find_library(DDCUTIL_LIBRARY NAMES ddcutil)
+find_path(DDCUTIL_INCLUDE_DIR ddcutil_c_api.h)
+
 add_executable(ciderdeck
   src/main.cpp
 
@@ -50,6 +54,8 @@ add_executable(ciderdeck
   src/services/AppLaunchManager.cpp
   src/services/AudioManager.h
   src/services/AudioManager.cpp
+  src/services/AudioMixerService.h
+  src/services/AudioMixerService.cpp
   src/services/MprisManager.h
   src/services/MprisManager.cpp
   src/services/WeatherService.h
@@ -79,6 +85,7 @@ add_executable(ciderdeck
   src/viewmodels/InstalledAppsModel.cpp
 
   src/qml/qml.qrc
+  src/resources/icons.qrc
 )
 
 target_include_directories(ciderdeck PRIVATE src)
@@ -88,6 +95,7 @@ target_compile_definitions(ciderdeck PRIVATE
   $<$<BOOL:${KF6WindowSystem_FOUND}>:HAVE_KF6WINDOWSYSTEM>
   $<$<BOOL:${KF6StatusNotifierItem_FOUND}>:HAVE_KF6STATUSNOTIFIERITEM>
   $<$<BOOL:${KF6PulseAudioQt_FOUND}>:HAVE_KF6PULSEAUDIOQT>
+  $<$<AND:$<BOOL:${DDCUTIL_LIBRARY}>,$<BOOL:${DDCUTIL_INCLUDE_DIR}>>:HAVE_LIBDDCUTIL>
 )
 
 target_link_libraries(ciderdeck PRIVATE
@@ -132,7 +140,20 @@ if(Qt6Multimedia_FOUND)
   target_link_libraries(ciderdeck PRIVATE Qt6::Multimedia)
 endif()
 
-install(TARGETS ciderdeck RUNTIME DESTINATION bin)
-install(FILES ciderdeck.desktop DESTINATION share/applications)
-install(FILES ciderdeck.desktop DESTINATION "${CMAKE_INSTALL_PREFIX}/share/autostart" OPTIONAL)
-install(FILES kwin-scripts/ciderdeck-bridge.js DESTINATION "${CMAKE_INSTALL_PREFIX}/share/ciderdeck/kwin-scripts")
+if(DDCUTIL_LIBRARY AND DDCUTIL_INCLUDE_DIR)
+  target_link_libraries(ciderdeck PRIVATE ${DDCUTIL_LIBRARY})
+  target_include_directories(ciderdeck PRIVATE ${DDCUTIL_INCLUDE_DIR})
+  message(STATUS "libddcutil found: direct DDC brightness control enabled")
+else()
+  message(WARNING "libddcutil not found: falling back to ddcutil subprocess")
+endif()
+
+include(GNUInstallDirs)
+
+install(TARGETS ciderdeck RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+install(FILES ciderdeck.desktop DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/applications")
+install(FILES ciderdeck.desktop DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/autostart")
+install(FILES kwin-scripts/ciderdeck-bridge.js
+        DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/ciderdeck/kwin-scripts")
+install(FILES data/icons/ciderdeck.svg
+        DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/scalable/apps")

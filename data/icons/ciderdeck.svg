@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <!-- Background rounded square -->
+  <rect x="4" y="4" width="120" height="120" rx="20" ry="20" fill="#1a1a2e"/>
+  <!-- Dashboard grid tiles -->
+  <!-- Top-left large tile -->
+  <rect x="16" y="16" width="52" height="44" rx="6" ry="6" fill="#4cc9f0"/>
+  <!-- Top-right tile -->
+  <rect x="74" y="16" width="38" height="20" rx="6" ry="6" fill="#7209b7"/>
+  <!-- Middle-right tile -->
+  <rect x="74" y="40" width="38" height="20" rx="6" ry="6" fill="#f72585"/>
+  <!-- Bottom-left tile -->
+  <rect x="16" y="66" width="24" height="46" rx="6" ry="6" fill="#f72585"/>
+  <!-- Bottom-center tile -->
+  <rect x="46" y="66" width="22" height="46" rx="6" ry="6" fill="#7209b7"/>
+  <!-- Bottom-right large tile -->
+  <rect x="74" y="66" width="38" height="46" rx="6" ry="6" fill="#4cc9f0"/>
+</svg>
