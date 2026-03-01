@@ -39,91 +39,142 @@ void BrightnessService::initBacklight() {
             brightness_ = qRound(100.0 * current / maxBrightness_);
         }
     }
+
+    // Add single backlight display entry
+    DisplayInfo info;
+    info.ddcDisplayNum = 0;
+    info.name = QStringLiteral("Built-in Display");
+    info.brightness = brightness_;
+    info.maxBrightness = maxBrightness_;
+    ddcDisplays_.append(info);
+
+    QVariantMap entry;
+    entry[QStringLiteral("id")] = 0;
+    entry[QStringLiteral("name")] = info.name;
+    displays_.append(entry);
+
     emit availableChanged();
     emit brightnessChanged();
+    emit displaysChanged();
 }
 
 void BrightnessService::initDdcutil() {
     QString ddcutil = QStandardPaths::findExecutable(QStringLiteral("ddcutil"));
     if (ddcutil.isEmpty()) return;
 
-    // Run ddcutil detect --brief to find the Xeneon Edge display
-    // Output format per display:
-    //   Display N
-    //      DRM connector:    card1-DP-3
+    enumerateDdcDisplays();
+
+    if (ddcDisplays_.isEmpty()) return;
+
+    method_ = QStringLiteral("ddcutil");
+    available_ = true;
+
+    // Set legacy single-display fields from first display
+    ddcDisplayNum_ = ddcDisplays_.first().ddcDisplayNum;
+    brightness_ = ddcDisplays_.first().brightness;
+    maxBrightness_ = ddcDisplays_.first().maxBrightness;
+
+    qInfo() << "[BrightnessService] Found" << ddcDisplays_.size() << "DDC displays";
+    for (const auto &d : ddcDisplays_) {
+        qInfo() << "  Display" << d.ddcDisplayNum << d.name
+                << "brightness:" << d.brightness << "/" << d.maxBrightness;
+    }
+
+    emit availableChanged();
+    emit brightnessChanged();
+    emit displaysChanged();
+}
+
+void BrightnessService::enumerateDdcDisplays() {
+    QString ddcutil = QStandardPaths::findExecutable(QStringLiteral("ddcutil"));
+    if (ddcutil.isEmpty()) return;
+
+    // Run ddcutil detect to enumerate all monitors
     QProcess detectProc;
     detectProc.start(ddcutil, {QStringLiteral("detect"), QStringLiteral("--brief")});
     if (!detectProc.waitForFinished(15000)) return;
 
     QString detectOutput = detectProc.readAllStandardOutput();
-    int targetDisplay = -1;
 
-    // Parse display numbers and their DRM connectors
-    // Look for the Xeneon Edge (2560x720) by connector name containing "DP-3"
-    // or by monitor name containing "XENEON"
     static QRegularExpression displayRe(QStringLiteral(R"(Display\s+(\d+))"));
-    static QRegularExpression connectorRe(QStringLiteral(R"(DRM connector:\s+\S+-(\S+))"));
     static QRegularExpression monitorRe(QStringLiteral(R"(Monitor:\s+(.+))"));
 
     const auto lines = detectOutput.split(QLatin1Char('\n'));
     int currentDisplayNum = -1;
+    QString currentMonitorName;
 
     for (const QString &line : lines) {
         auto displayMatch = displayRe.match(line);
         if (displayMatch.hasMatch()) {
+            // Save previous display if we had one
+            if (currentDisplayNum > 0) {
+                DisplayInfo info;
+                info.ddcDisplayNum = currentDisplayNum;
+                info.name = currentMonitorName.isEmpty()
+                    ? QStringLiteral("Display %1").arg(currentDisplayNum)
+                    : currentMonitorName;
+                ddcDisplays_.append(info);
+
+                QVariantMap entry;
+                entry[QStringLiteral("id")] = ddcDisplays_.size() - 1;
+                entry[QStringLiteral("name")] = info.name;
+                displays_.append(entry);
+            }
             currentDisplayNum = displayMatch.captured(1).toInt();
+            currentMonitorName.clear();
             continue;
         }
 
-        // Check monitor name for XENEON
         auto monitorMatch = monitorRe.match(line);
         if (monitorMatch.hasMatch() && currentDisplayNum > 0) {
-            if (monitorMatch.captured(1).contains(QStringLiteral("XENEON"), Qt::CaseInsensitive)) {
-                targetDisplay = currentDisplayNum;
-                break;
-            }
-        }
-
-        // Also match by connector name (e.g., DP-3)
-        auto connMatch = connectorRe.match(line);
-        if (connMatch.hasMatch() && currentDisplayNum > 0) {
-            // The connector name from ddcutil is like "card1-DP-3", we extract "DP-3"
-            // But our screen names from Qt are just "DP-3"
-            // For now, prefer XENEON match above; this is a fallback
+            currentMonitorName = monitorMatch.captured(1).trimmed();
         }
     }
 
-    // If we didn't find XENEON specifically, try all displays and pick the first one that works
-    if (targetDisplay < 0) {
-        targetDisplay = 1;
+    // Don't forget the last display
+    if (currentDisplayNum > 0) {
+        DisplayInfo info;
+        info.ddcDisplayNum = currentDisplayNum;
+        info.name = currentMonitorName.isEmpty()
+            ? QStringLiteral("Display %1").arg(currentDisplayNum)
+            : currentMonitorName;
+        ddcDisplays_.append(info);
+
+        QVariantMap entry;
+        entry[QStringLiteral("id")] = ddcDisplays_.size() - 1;
+        entry[QStringLiteral("name")] = info.name;
+        displays_.append(entry);
     }
 
-    // Now read brightness from the target display
-    QProcess proc;
-    proc.start(ddcutil, {QStringLiteral("getvcp"), QStringLiteral("10"),
-                         QStringLiteral("--display"), QString::number(targetDisplay),
-                         QStringLiteral("--brief")});
-    if (!proc.waitForFinished(5000)) return;
+    // Now read brightness for each display
+    for (int i = 0; i < ddcDisplays_.size(); ++i) {
+        QProcess proc;
+        proc.start(ddcutil, {QStringLiteral("getvcp"), QStringLiteral("10"),
+                             QStringLiteral("--display"), QString::number(ddcDisplays_[i].ddcDisplayNum),
+                             QStringLiteral("--brief")});
+        if (!proc.waitForFinished(5000)) continue;
 
-    QString output = proc.readAllStandardOutput();
-    static QRegularExpression re(QStringLiteral(R"(VCP\s+10\s+C\s+(\d+)\s+(\d+))"));
-    auto match = re.match(output);
-    if (!match.hasMatch()) return;
+        QString output = proc.readAllStandardOutput();
+        static QRegularExpression re(QStringLiteral(R"(VCP\s+10\s+C\s+(\d+)\s+(\d+))"));
+        auto match = re.match(output);
+        if (match.hasMatch()) {
+            ddcDisplays_[i].brightness = match.captured(1).toInt();
+            ddcDisplays_[i].maxBrightness = match.captured(2).toInt();
+        }
+    }
+}
 
-    brightness_ = match.captured(1).toInt();
-    maxBrightness_ = match.captured(2).toInt();
-    ddcDisplayNum_ = targetDisplay;
-    method_ = QStringLiteral("ddcutil");
-    available_ = true;
-
-    qInfo() << "[BrightnessService] Using ddcutil display" << targetDisplay
-             << "brightness:" << brightness_ << "/" << maxBrightness_;
-
-    emit availableChanged();
-    emit brightnessChanged();
+int BrightnessService::getBrightness(int displayIndex) const {
+    if (displayIndex < 0 || displayIndex >= ddcDisplays_.size())
+        return brightness_;
+    return ddcDisplays_[displayIndex].brightness;
 }
 
 void BrightnessService::setBrightness(int percent) {
+    setBrightness(0, percent);
+}
+
+void BrightnessService::setBrightness(int displayIndex, int percent) {
     if (!available_) return;
     percent = qBound(1, percent, 100);
 
@@ -136,24 +187,38 @@ void BrightnessService::setBrightness(int percent) {
             stream << value;
             file.close();
             brightness_ = percent;
+            if (displayIndex >= 0 && displayIndex < ddcDisplays_.size()) {
+                ddcDisplays_[displayIndex].brightness = percent;
+            }
             emit brightnessChanged();
+            emit displayBrightnessChanged(displayIndex, percent);
         }
     } else if (method_ == QLatin1String("ddcutil")) {
-        if (ddcBusy_) return; // skip if previous call still running
-        ddcBusy_ = true;
-        brightness_ = percent;
-        emit brightnessChanged();
+        if (displayIndex < 0 || displayIndex >= ddcDisplays_.size()) return;
+        auto &disp = ddcDisplays_[displayIndex];
+        if (disp.busy) return;
+        disp.busy = true;
+        disp.brightness = percent;
+
+        // Update legacy field if this is the first display
+        if (displayIndex == 0) {
+            brightness_ = percent;
+            emit brightnessChanged();
+        }
+        emit displayBrightnessChanged(displayIndex, percent);
 
         QString ddcutil = QStandardPaths::findExecutable(QStringLiteral("ddcutil"));
         auto *proc = new QProcess(this);
-        connect(proc, &QProcess::finished, this, [this, proc](int exitCode, QProcess::ExitStatus) {
+        connect(proc, &QProcess::finished, this, [this, displayIndex, proc](int exitCode, QProcess::ExitStatus) {
             Q_UNUSED(exitCode)
-            ddcBusy_ = false;
+            if (displayIndex >= 0 && displayIndex < ddcDisplays_.size()) {
+                ddcDisplays_[displayIndex].busy = false;
+            }
             proc->deleteLater();
         });
         proc->start(ddcutil, {QStringLiteral("setvcp"), QStringLiteral("10"),
                               QString::number(percent),
-                              QStringLiteral("--display"), QString::number(ddcDisplayNum_),
+                              QStringLiteral("--display"), QString::number(disp.ddcDisplayNum),
                               QStringLiteral("--noverify")});
     }
 }
@@ -177,27 +242,36 @@ void BrightnessService::refresh() {
             }
         }
     } else if (method_ == QLatin1String("ddcutil")) {
-        if (ddcBusy_) return;
-        ddcBusy_ = true;
-
         QString ddcutil = QStandardPaths::findExecutable(QStringLiteral("ddcutil"));
-        auto *proc = new QProcess(this);
-        connect(proc, &QProcess::finished, this, [this, proc](int exitCode, QProcess::ExitStatus) {
-            Q_UNUSED(exitCode)
-            ddcBusy_ = false;
-            QString output = proc->readAllStandardOutput();
-            static QRegularExpression re(QStringLiteral(R"(VCP\s+10\s+C\s+(\d+)\s+(\d+))"));
-            auto match = re.match(output);
-            if (match.hasMatch()) {
-                brightness_ = match.captured(1).toInt();
-                maxBrightness_ = match.captured(2).toInt();
-                emit brightnessChanged();
-            }
-            proc->deleteLater();
-        });
-        proc->start(ddcutil, {QStringLiteral("getvcp"), QStringLiteral("10"),
-                              QStringLiteral("--display"), QString::number(ddcDisplayNum_),
-                              QStringLiteral("--brief")});
+
+        for (int i = 0; i < ddcDisplays_.size(); ++i) {
+            if (ddcDisplays_[i].busy) continue;
+            ddcDisplays_[i].busy = true;
+
+            auto *proc = new QProcess(this);
+            connect(proc, &QProcess::finished, this, [this, i, proc](int exitCode, QProcess::ExitStatus) {
+                Q_UNUSED(exitCode)
+                if (i >= ddcDisplays_.size()) { proc->deleteLater(); return; }
+                ddcDisplays_[i].busy = false;
+                QString output = proc->readAllStandardOutput();
+                static QRegularExpression re(QStringLiteral(R"(VCP\s+10\s+C\s+(\d+)\s+(\d+))"));
+                auto match = re.match(output);
+                if (match.hasMatch()) {
+                    ddcDisplays_[i].brightness = match.captured(1).toInt();
+                    ddcDisplays_[i].maxBrightness = match.captured(2).toInt();
+                    emit displayBrightnessChanged(i, ddcDisplays_[i].brightness);
+                    if (i == 0) {
+                        brightness_ = ddcDisplays_[i].brightness;
+                        maxBrightness_ = ddcDisplays_[i].maxBrightness;
+                        emit brightnessChanged();
+                    }
+                }
+                proc->deleteLater();
+            });
+            proc->start(ddcutil, {QStringLiteral("getvcp"), QStringLiteral("10"),
+                                  QStringLiteral("--display"), QString::number(ddcDisplays_[i].ddcDisplayNum),
+                                  QStringLiteral("--brief")});
+        }
     }
 }
 

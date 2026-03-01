@@ -38,6 +38,8 @@ public:
     explicit CiderDeckApp(QObject *parent = nullptr);
     int run(QApplication &app);
 
+    Q_INVOKABLE void setKeyboardEnabled(bool enabled);
+
 private:
     void wireSignals();
     void configureWindow(QWindow *window);
@@ -65,6 +67,7 @@ private:
     ToastModel *toastModel_ = nullptr;
     InstalledAppsModel *installedApps_ = nullptr;
     AppFilterModel *appFilterModel_ = nullptr;
+    QWindow *mainWindow_ = nullptr;
 };
 
 } // namespace ciderdeck

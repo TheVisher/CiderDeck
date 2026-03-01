@@ -134,6 +134,7 @@ int CiderDeckApp::run(QApplication &app) {
     ctx->setContextProperty("toastModel", toastModel_);
     ctx->setContextProperty("installedAppsModel", installedApps_);
     ctx->setContextProperty("appFilterModel", appFilterModel_);
+    ctx->setContextProperty("deckApp", this);
 
     wireSignals();
 
@@ -148,6 +149,7 @@ int CiderDeckApp::run(QApplication &app) {
 
         auto *window = qobject_cast<QWindow *>(obj);
         if (window) {
+            mainWindow_ = window;
             configureWindow(window);
             window->setVisible(true);
         }
@@ -238,7 +240,7 @@ void CiderDeckApp::configureWindow(QWindow *window) {
             | LayerShellQt::Window::AnchorBottom
             | LayerShellQt::Window::AnchorLeft
             | LayerShellQt::Window::AnchorRight));
-        lw->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityOnDemand);
+        lw->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
         lw->setExclusiveZone(-1);
         lw->setScope(QStringLiteral("ciderdeck"));
 
@@ -269,6 +271,19 @@ void CiderDeckApp::applyWindowEffects(QWindow *window) {
     }
 #else
     Q_UNUSED(window)
+#endif
+}
+
+void CiderDeckApp::setKeyboardEnabled(bool enabled) {
+#ifdef HAVE_LAYERSHELLQT
+    if (!mainWindow_) return;
+    auto *lw = LayerShellQt::Window::get(mainWindow_);
+    if (!lw) return;
+    lw->setKeyboardInteractivity(enabled
+        ? LayerShellQt::Window::KeyboardInteractivityOnDemand
+        : LayerShellQt::Window::KeyboardInteractivityNone);
+#else
+    Q_UNUSED(enabled)
 #endif
 }
 
