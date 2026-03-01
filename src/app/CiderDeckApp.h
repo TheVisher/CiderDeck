@@ -23,6 +23,7 @@ class ScreenshotService;
 class BrightnessService;
 class ClipboardService;
 class TimerService;
+class AudioMixerService;
 class KWinDBusClient;
 class TileGridModel;
 class EditModeController;
@@ -49,6 +50,7 @@ private:
     CommandRunner *commandRunner_ = nullptr;
     AppLaunchManager *appLaunchManager_ = nullptr;
     AudioManager *audioManager_ = nullptr;
+    AudioMixerService *audioMixerService_ = nullptr;
     MprisManager *mprisManager_ = nullptr;
     WeatherService *weatherService_ = nullptr;
     SystemMonitorService *systemMonitor_ = nullptr;

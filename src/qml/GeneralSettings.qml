@@ -7,6 +7,7 @@ Flickable {
     clip: true
     contentHeight: settingsColumn.height
     flickableDirection: Flickable.VerticalFlick
+    readonly property real ts: deckConfig.settingsTextScale
 
     ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
@@ -19,7 +20,7 @@ Flickable {
         Text {
             text: "Appearance"
             color: themeManager.accentColor
-            font.pixelSize: 15
+            font.pixelSize: 15 * generalSettings.ts
             font.bold: true
         }
 
@@ -36,7 +37,7 @@ Flickable {
                     contentItem: Text {
                         text: parent.text
                         color: parent.highlighted ? themeManager.accentColor : themeManager.textColor
-                        font.pixelSize: 13
+                        font.pixelSize: 13 * generalSettings.ts
                     }
                     background: Rectangle {
                         implicitWidth: 60; implicitHeight: 28; radius: 6
@@ -52,7 +53,7 @@ Flickable {
                     contentItem: Text {
                         text: parent.text
                         color: parent.highlighted ? themeManager.accentColor : themeManager.textColor
-                        font.pixelSize: 13
+                        font.pixelSize: 13 * generalSettings.ts
                     }
                     background: Rectangle {
                         implicitWidth: 60; implicitHeight: 28; radius: 6
@@ -107,7 +108,7 @@ Flickable {
                 Text {
                     text: Math.round(deckConfig.globalOpacity * 100) + "%"
                     color: themeManager.secondaryTextColor
-                    font.pixelSize: 12
+                    font.pixelSize: 12 * generalSettings.ts
                 }
             }
         }
@@ -126,8 +127,51 @@ Flickable {
                 Text {
                     text: deckConfig.cardRadius + "px"
                     color: themeManager.secondaryTextColor
-                    font.pixelSize: 12
+                    font.pixelSize: 12 * generalSettings.ts
                 }
+            }
+        }
+
+        // Global text scale
+        SettingsRow {
+            label: "Text scale"
+            RowLayout {
+                spacing: 8
+                Slider {
+                    id: globalTextScaleSlider
+                    from: 0.5; to: 2.5; stepSize: 0.05
+                    value: deckConfig.globalTextScale
+                    onMoved: deckConfig.globalTextScale = Math.round(value * 100) / 100
+                    implicitWidth: 140
+                }
+                Text {
+                    text: Math.round(globalTextScaleSlider.value * 100) + "%"
+                    color: themeManager.secondaryTextColor
+                    font.pixelSize: 12 * generalSettings.ts
+                }
+            }
+        }
+
+        // Settings text scale
+        SettingsRow {
+            label: "Settings text size"
+            ComboBox {
+                model: ["Small", "Medium", "Default", "Large", "X-Large"]
+                property var scaleValues: [0.8, 0.9, 1.0, 1.2, 1.4]
+                currentIndex: {
+                    var scale = deckConfig.settingsTextScale
+                    var best = 2
+                    var bestDist = 999
+                    for (var i = 0; i < scaleValues.length; i++) {
+                        var d = Math.abs(scaleValues[i] - scale)
+                        if (d < bestDist) { bestDist = d; best = i }
+                    }
+                    return best
+                }
+                onActivated: (index) => {
+                    deckConfig.settingsTextScale = scaleValues[index]
+                }
+                implicitWidth: 150
             }
         }
 
@@ -156,7 +200,7 @@ Flickable {
                         contentItem: Text {
                             text: parent.text
                             color: parent.highlighted ? themeManager.accentColor : themeManager.textColor
-                            font.pixelSize: 12
+                            font.pixelSize: 12 * generalSettings.ts
                         }
                         background: Rectangle {
                             implicitWidth: 70; implicitHeight: 26; radius: 6
@@ -174,7 +218,7 @@ Flickable {
         Text {
             text: "Grid"
             color: themeManager.accentColor
-            font.pixelSize: 15
+            font.pixelSize: 15 * generalSettings.ts
             font.bold: true
         }
 
@@ -191,7 +235,7 @@ Flickable {
                 Text {
                     text: deckConfig.gridGap + "px"
                     color: themeManager.secondaryTextColor
-                    font.pixelSize: 12
+                    font.pixelSize: 12 * generalSettings.ts
                 }
             }
         }
@@ -209,7 +253,7 @@ Flickable {
                 Text {
                     text: deckConfig.padding + "px"
                     color: themeManager.secondaryTextColor
-                    font.pixelSize: 12
+                    font.pixelSize: 12 * generalSettings.ts
                 }
             }
         }
@@ -220,7 +264,7 @@ Flickable {
         Text {
             text: "Display"
             color: themeManager.accentColor
-            font.pixelSize: 15
+            font.pixelSize: 15 * generalSettings.ts
             font.bold: true
         }
 
@@ -264,7 +308,7 @@ Flickable {
         Text {
             text: "Configuration"
             color: themeManager.accentColor
-            font.pixelSize: 15
+            font.pixelSize: 15 * generalSettings.ts
             font.bold: true
         }
 
@@ -282,7 +326,7 @@ Flickable {
                 contentItem: Text {
                     text: parent.text
                     color: themeManager.textColor
-                    font.pixelSize: 13
+                    font.pixelSize: 13 * generalSettings.ts
                     horizontalAlignment: Text.AlignHCenter
                 }
                 background: Rectangle {
@@ -305,7 +349,7 @@ Flickable {
                 contentItem: Text {
                     text: parent.text
                     color: themeManager.textColor
-                    font.pixelSize: 13
+                    font.pixelSize: 13 * generalSettings.ts
                     horizontalAlignment: Text.AlignHCenter
                 }
                 background: Rectangle {

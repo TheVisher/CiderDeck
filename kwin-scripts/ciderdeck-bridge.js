@@ -4,7 +4,7 @@
 function pushWindowList() {
     var windows = workspace.windowList()
         .filter(function(w) {
-            return w && !w.desktopWindow && !w.dock && !w.skipTaskbar;
+            return w && !w.desktopWindow && !w.dock;
         })
         .map(function(w) {
             var activeWin = workspace.activeWindow;

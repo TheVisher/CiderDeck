@@ -27,5 +27,9 @@
         <file>GeneralSettings.qml</file>
         <file>TileSettings.qml</file>
         <file>SettingsRow.qml</file>
+        <file>AudioMixerTile.qml</file>
+        <file>MixerOverlay.qml</file>
+        <file>ShowDesktopTile.qml</file>
+        <file>OverviewTile.qml</file>
     </qresource>
 </RCC>

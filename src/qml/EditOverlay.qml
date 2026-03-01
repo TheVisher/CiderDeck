@@ -23,12 +23,11 @@ Item {
         y: -8
         z: 10
 
-        Text {
+        LucideIcon {
             anchors.centerIn: parent
-            text: "\u00D7"
+            width: 14; height: 14
+            source: "qrc:/icons/lucide/x.svg"
             color: "white"
-            font.pixelSize: 16
-            font.bold: true
         }
 
         MouseArea {
@@ -54,19 +53,11 @@ Item {
         anchors.bottomMargin: -4
         z: 10
 
-        // Three diagonal lines to indicate resize
-        Column {
+        LucideIcon {
             anchors.centerIn: parent
-            spacing: 3
-            Repeater {
-                model: 3
-                Rectangle {
-                    width: 10 - index * 3
-                    height: 2
-                    color: "white"
-                    x: index * 3
-                }
-            }
+            width: 14; height: 14
+            source: "qrc:/icons/lucide/maximize-2.svg"
+            color: "white"
         }
 
         MouseArea {
@@ -92,6 +83,28 @@ Item {
         }
     }
 
+    // Per-tile center crosshair (white to distinguish from grid center lines)
+    Rectangle {
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.topMargin: 8
+        anchors.bottomMargin: 8
+        width: 1
+        color: "#ffffff"
+        opacity: 0.12
+    }
+    Rectangle {
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.leftMargin: 8
+        anchors.rightMargin: 8
+        height: 1
+        color: "#ffffff"
+        opacity: 0.12
+    }
+
     // Drag handler on the main tile body
     MouseArea {
         id: dragArea
@@ -102,8 +115,12 @@ Item {
         enabled: overlay.editMode
 
         onPressed: (mouse) => {
+            let globalPos = dragArea.mapToItem(null, mouse.x, mouse.y)
             editController.beginDrag(overlay.tileId, overlay.colValue, overlay.rowValue,
-                                      overlay.colSpanValue, overlay.rowSpanValue)
+                                      overlay.colSpanValue, overlay.rowSpanValue,
+                                      globalPos.x, globalPos.y,
+                                      root.cellWidth, root.cellHeight,
+                                      root.gridGap, root.gridPadding)
         }
 
         onPositionChanged: (mouse) => {

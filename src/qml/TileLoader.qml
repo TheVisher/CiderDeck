@@ -31,17 +31,19 @@ Item {
     // Tile-specific opacity (passed to Card background, NOT the whole tile)
     readonly property real effectiveOpacity: tileOpacityValue >= 0 ? tileOpacityValue : deckConfig.globalOpacity
 
-    // Content scale factor (from tile settings, default 1.0)
+    // Content scale factor: per-tile override if set, otherwise global text scale
     readonly property real contentScaleValue: {
         var s = tileSettingsValue ? tileSettingsValue.contentScale : undefined
-        return (s !== undefined && s > 0) ? s : 1.0
+        if (s !== undefined && s > 0) return s
+        return deckConfig.globalTextScale > 0 ? deckConfig.globalTextScale : 1.0
     }
 
-    // Size class for adaptive tiles
+    // Size class for adaptive tiles — used by tiles that need layout breakpoints.
+    // Tiles that need smooth scaling (weather, etc.) use overflow-based visibility instead.
     readonly property string sizeClass: {
-        if (width < 200 || height < 200) return "tiny"
-        if (width < 400 || height < 300) return "small"
-        if (width < 700) return "medium"
+        if (width < 160 || height < 160) return "tiny"
+        if (width < 320 || height < 250) return "small"
+        if (width < 600) return "medium"
         return "large"
     }
 
@@ -77,6 +79,9 @@ Item {
             case "brightness":      return brightnessComponent
             case "clipboard":       return clipboardComponent
             case "timer_stopwatch": return timerComponent
+            case "show_desktop":   return showDesktopComponent
+            case "overview":       return overviewComponent
+            case "audio_mixer":    return audioMixerComponent
             default:                return placeholderComponent
             }
         }
@@ -131,4 +136,7 @@ Item {
     Component { id: brightnessComponent;     BrightnessTile {} }
     Component { id: clipboardComponent;      ClipboardHistoryTile {} }
     Component { id: timerComponent;          TimerStopwatchTile {} }
+    Component { id: showDesktopComponent;  ShowDesktopTile {} }
+    Component { id: overviewComponent;     OverviewTile {} }
+    Component { id: audioMixerComponent;  AudioMixerTile {} }
 }

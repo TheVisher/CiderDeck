@@ -54,6 +54,8 @@ add_executable(ciderdeck
   src/services/AppLaunchManager.cpp
   src/services/AudioManager.h
   src/services/AudioManager.cpp
+  src/services/AudioMixerService.h
+  src/services/AudioMixerService.cpp
   src/services/MprisManager.h
   src/services/MprisManager.cpp
   src/services/WeatherService.h

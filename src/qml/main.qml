@@ -20,6 +20,7 @@ Window {
 
     // Background touch area for context menu and edit mode exit
     MouseArea {
+        id: backgroundArea
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         z: -1
@@ -36,35 +37,120 @@ Window {
         onPressAndHold: {
             editController.enterEditMode()
         }
+
+        Keys.onEscapePressed: {
+            if (settingsPanel.isOpen) {
+                settingsPanel.close()
+            } else if (editController.editing) {
+                editController.exitEditMode()
+            }
+        }
     }
 
-    // Edit mode border indicator
-    Rectangle {
+    // Edit mode border indicator — gradient edges that fade toward center
+    Item {
         anchors.fill: parent
-        color: "transparent"
-        border.width: editController.editing ? 3 : 0
-        border.color: themeManager.accentColor
-        radius: 2
         z: 150
         visible: editController.editing
 
-        // "Editing" badge top-center
+        // Top edge
+        Rectangle {
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            height: 3
+            gradient: Gradient {
+                orientation: Gradient.Horizontal
+                GradientStop { position: 0.0; color: themeManager.accentColor }
+                GradientStop { position: 0.5; color: "transparent" }
+                GradientStop { position: 1.0; color: themeManager.accentColor }
+            }
+        }
+        // Bottom edge
+        Rectangle {
+            anchors.bottom: parent.bottom
+            anchors.left: parent.left
+            anchors.right: parent.right
+            height: 3
+            gradient: Gradient {
+                orientation: Gradient.Horizontal
+                GradientStop { position: 0.0; color: themeManager.accentColor }
+                GradientStop { position: 0.5; color: "transparent" }
+                GradientStop { position: 1.0; color: themeManager.accentColor }
+            }
+        }
+        // Left edge
+        Rectangle {
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            anchors.left: parent.left
+            width: 3
+            gradient: Gradient {
+                orientation: Gradient.Vertical
+                GradientStop { position: 0.0; color: themeManager.accentColor }
+                GradientStop { position: 0.5; color: "transparent" }
+                GradientStop { position: 1.0; color: themeManager.accentColor }
+            }
+        }
+        // Right edge
+        Rectangle {
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            anchors.right: parent.right
+            width: 3
+            gradient: Gradient {
+                orientation: Gradient.Vertical
+                GradientStop { position: 0.0; color: themeManager.accentColor }
+                GradientStop { position: 0.5; color: "transparent" }
+                GradientStop { position: 1.0; color: themeManager.accentColor }
+            }
+        }
+
+        // Center guide lines
+        Rectangle {
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: 1
+            color: themeManager.accentColor
+            opacity: 0.2
+        }
+        Rectangle {
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.left: parent.left
+            anchors.right: parent.right
+            height: 1
+            color: themeManager.accentColor
+            opacity: 0.2
+        }
+
+        // "Done" badge top-center (tappable to exit edit mode)
         Rectangle {
             anchors.top: parent.top
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.topMargin: 4
             width: editLabel.width + 24
-            height: 26
-            radius: 13
-            color: themeManager.accentColor
+            height: 28
+            radius: 14
+            color: doneBtnArea.containsMouse
+                   ? Qt.lighter(themeManager.accentColor, 1.2)
+                   : themeManager.accentColor
 
             Text {
                 id: editLabel
                 anchors.centerIn: parent
-                text: "Editing — tap empty space to exit"
+                text: "Done  (ESC)"
                 color: "white"
                 font.pixelSize: 12
                 font.weight: Font.DemiBold
+            }
+
+            MouseArea {
+                id: doneBtnArea
+                anchors.fill: parent
+                anchors.margins: -4
+                hoverEnabled: true
+                onClicked: editController.exitEditMode()
             }
         }
     }
@@ -97,11 +183,11 @@ Window {
         z: 100
     }
 
-    // Page dots
+    // Page navigation strip (dots + swipe + arrows)
     PageDots {
         anchors.bottom: parent.bottom
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.bottomMargin: 6
+        anchors.left: parent.left
+        anchors.right: parent.right
         pageCount: deckConfig.pageCount
         currentPage: deckConfig.currentPage
         z: 50
@@ -110,6 +196,21 @@ Window {
     // Toast stack
     ToastStack {
         z: 200
+    }
+
+    // Mixer overlay (between toasts and settings panel)
+    MixerOverlay {
+        id: mixerOverlay
+        z: 250
+    }
+
+    // Enable keyboard only when edit mode or settings panel is open
+    // (so ESC works), disable otherwise (touch never steals focus)
+    Connections {
+        target: editController
+        function onEditingChanged() {
+            deckApp.setKeyboardEnabled(editController.editing || settingsPanel.isOpen)
+        }
     }
 
     // Context menu
@@ -121,5 +222,8 @@ Window {
     SettingsPanel {
         id: settingsPanel
         z: 300
+        onIsOpenChanged: {
+            deckApp.setKeyboardEnabled(editController.editing || isOpen)
+        }
     }
 }

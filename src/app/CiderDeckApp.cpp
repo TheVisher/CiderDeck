@@ -24,6 +24,7 @@
 #include "services/CommandRunner.h"
 #include "services/AppLaunchManager.h"
 #include "services/AudioManager.h"
+#include "services/AudioMixerService.h"
 #include "services/MprisManager.h"
 #include "services/WeatherService.h"
 #include "services/SystemMonitorService.h"
@@ -53,6 +54,7 @@ int CiderDeckApp::run(QApplication &app) {
     commandRunner_ = new CommandRunner(this);
     appLaunchManager_ = new AppLaunchManager(this);
     audioManager_ = new AudioManager(this);
+    audioMixerService_ = new AudioMixerService(audioManager_, this);
     mprisManager_ = new MprisManager(this);
     weatherService_ = new WeatherService(this);
     systemMonitor_ = new SystemMonitorService(this);
@@ -90,6 +92,7 @@ int CiderDeckApp::run(QApplication &app) {
     ctx->setContextProperty("commandRunner", commandRunner_);
     ctx->setContextProperty("appLaunchManager", appLaunchManager_);
     ctx->setContextProperty("audioManager", audioManager_);
+    ctx->setContextProperty("audioMixerService", audioMixerService_);
     ctx->setContextProperty("mprisManager", mprisManager_);
     ctx->setContextProperty("weatherService", weatherService_);
     ctx->setContextProperty("systemMonitor", systemMonitor_);

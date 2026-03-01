@@ -7,6 +7,26 @@ Card {
     property var settings: parent ? parent.settings : ({})
     readonly property real contentScale: parent ? (parent.contentScale || 1.0) : 1.0
 
+    // Toggles
+    readonly property bool wantControls: settings.showControls !== false
+    readonly property bool wantModeToggle: settings.showModeToggle !== false
+
+    // Overflow detection
+    readonly property real pad: 12
+    readonly property real availH: height - pad * 2
+    readonly property real sp: 8
+
+    readonly property real timeH: 36 * contentScale
+    readonly property real controlsH: 36
+    readonly property real modeH: 24
+
+    readonly property real h0: timeH
+    readonly property real h1: h0 + sp + controlsH
+    readonly property real h2: h1 + sp + modeH
+
+    readonly property bool controlsFit: h1 <= availH
+    readonly property bool modeFits: h2 <= availH
+
     Connections {
         target: timerService
         function onFinished() {
@@ -16,31 +36,23 @@ Card {
 
     Column {
         anchors.centerIn: parent
-        spacing: 8
+        spacing: timerTile.sp
 
-        // Time display
+        // Time display (always shown)
         Text {
             text: timerService.displayTime
             color: themeManager.textColor
-            font.pixelSize: {
-                var base
-                switch (timerTile.sizeClass) {
-                case "tiny":  base = Math.min(timerTile.width, timerTile.height) * 0.3; break
-                case "small": base = 28; break
-                default:      base = 36; break
-                }
-                return base * timerTile.contentScale
-            }
+            font.pixelSize: timerTile.timeH
             font.weight: Font.DemiBold
             font.family: "monospace"
             anchors.horizontalCenter: parent.horizontalCenter
         }
 
-        // Controls (small+)
+        // Controls (overflow-based)
         Row {
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: 12
-            visible: timerTile.sizeClass !== "tiny"
+            visible: timerTile.wantControls && timerTile.controlsFit
 
             // Start/Pause
             Rectangle {
@@ -49,11 +61,13 @@ Card {
                 radius: 18
                 color: timerService.state === "running" ? themeManager.errorColor : themeManager.successColor
 
-                Text {
+                LucideIcon {
                     anchors.centerIn: parent
-                    text: timerService.state === "running" ? "\u23F8" : "\u25B6"
+                    width: 18; height: 18
+                    source: timerService.state === "running"
+                            ? "qrc:/icons/lucide/pause.svg"
+                            : "qrc:/icons/lucide/play.svg"
                     color: "white"
-                    font.pixelSize: 16
                 }
 
                 MouseArea {
@@ -75,11 +89,11 @@ Card {
                 radius: 18
                 color: themeManager.overlayColor
 
-                Text {
+                LucideIcon {
                     anchors.centerIn: parent
-                    text: "\u21BA"
+                    width: 18; height: 18
+                    source: "qrc:/icons/lucide/rotate-ccw.svg"
                     color: themeManager.textColor
-                    font.pixelSize: 18
                 }
 
                 MouseArea {
@@ -89,11 +103,11 @@ Card {
             }
         }
 
-        // Mode toggle (medium+)
+        // Mode toggle (overflow-based)
         Row {
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: 8
-            visible: timerTile.sizeClass === "medium" || timerTile.sizeClass === "large"
+            visible: timerTile.wantModeToggle && timerTile.modeFits
 
             Rectangle {
                 width: timerLabel.width + 16

@@ -72,11 +72,11 @@ Card {
                         anchors.verticalCenter: parent.verticalCenter
                         visible: procTile.sizeClass === "medium" || procTile.sizeClass === "large"
 
-                        Text {
+                        LucideIcon {
                             anchors.centerIn: parent
-                            text: "\u00D7"
+                            width: 10; height: 10
+                            source: "qrc:/icons/lucide/x.svg"
                             color: "white"
-                            font.pixelSize: 10
                         }
 
                         MouseArea {

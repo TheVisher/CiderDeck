@@ -9,6 +9,8 @@ Rectangle {
     property string mode: "general" // "general" or "tile"
     property string editingTileId: ""
 
+    readonly property real ts: deckConfig.settingsTextScale
+
     visible: isOpen
     color: Qt.rgba(themeManager.backgroundColor.r,
                    themeManager.backgroundColor.g,
@@ -17,20 +19,61 @@ Rectangle {
     border.color: themeManager.borderColor
     radius: 16
 
-    width: 420
+    width: 520
     height: parent.height - 32
-    anchors.right: parent.right
-    anchors.rightMargin: isOpen ? 16 : -width
-    anchors.verticalCenter: parent.verticalCenter
+    y: (parent.height - height) / 2
+    x: parent.width - width - 16
 
-    Behavior on anchors.rightMargin {
+    Behavior on x {
+        id: xBehavior
+        enabled: true
         NumberAnimation { duration: 250; easing.type: Easing.OutCubic }
     }
 
-    // Block clicks from passing through
+    onIsOpenChanged: {
+        if (isOpen) {
+            x = parent.width - width - 16
+        } else {
+            x = parent.width + 16
+        }
+    }
+
+    // Drag handle + click absorber
     MouseArea {
+        id: dragArea
         anchors.fill: parent
-        onClicked: {} // absorb
+
+        property bool isDragging: false
+        property real startGlobalX: 0
+        property real startPanelX: 0
+
+        onPressed: (mouse) => {
+            // Only drag from the top 48px (header area)
+            if (mouse.y <= 48) {
+                isDragging = true
+                var global = mapToItem(settingsPanel.parent, mouse.x, mouse.y)
+                startGlobalX = global.x
+                startPanelX = settingsPanel.x
+                xBehavior.enabled = false
+            }
+        }
+        onPositionChanged: (mouse) => {
+            if (isDragging) {
+                var global = mapToItem(settingsPanel.parent, mouse.x, mouse.y)
+                var newX = startPanelX + (global.x - startGlobalX)
+                // Clamp so panel stays at least 60px on screen
+                settingsPanel.x = Math.max(-settingsPanel.width + 60,
+                    Math.min(settingsPanel.parent.width - 60, newX))
+            }
+        }
+        onReleased: {
+            isDragging = false
+            xBehavior.enabled = true
+        }
+        onCanceled: {
+            isDragging = false
+            xBehavior.enabled = true
+        }
     }
 
     ColumnLayout {
@@ -45,7 +88,7 @@ Rectangle {
             Text {
                 text: settingsPanel.mode === "tile" ? "Tile Settings" : "Settings"
                 color: themeManager.textColor
-                font.pixelSize: 20
+                font.pixelSize: 20 * settingsPanel.ts
                 font.bold: true
                 Layout.fillWidth: true
             }
@@ -57,7 +100,7 @@ Rectangle {
                 contentItem: Text {
                     text: "X"
                     color: themeManager.textColor
-                    font.pixelSize: 16
+                    font.pixelSize: 16 * settingsPanel.ts
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }

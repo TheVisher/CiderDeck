@@ -19,6 +19,9 @@ enum class TileType {
     Clipboard,
     TimerStopwatch,
     CommandButton,
+    ShowDesktop,
+    Overview,
+    AudioMixer,
 };
 Q_ENUM_NS(TileType)
 
@@ -36,6 +39,9 @@ inline QString tileTypeToString(TileType type) {
     case TileType::Clipboard:       return QStringLiteral("clipboard");
     case TileType::TimerStopwatch:  return QStringLiteral("timer_stopwatch");
     case TileType::CommandButton:   return QStringLiteral("command_button");
+    case TileType::ShowDesktop:    return QStringLiteral("show_desktop");
+    case TileType::Overview:       return QStringLiteral("overview");
+    case TileType::AudioMixer:     return QStringLiteral("audio_mixer");
     }
     return QStringLiteral("unknown");
 }
@@ -53,6 +59,9 @@ inline TileType tileTypeFromString(const QString &str) {
     if (str == "clipboard")        return TileType::Clipboard;
     if (str == "timer_stopwatch")  return TileType::TimerStopwatch;
     if (str == "command_button")   return TileType::CommandButton;
+    if (str == "show_desktop")    return TileType::ShowDesktop;
+    if (str == "overview")        return TileType::Overview;
+    if (str == "audio_mixer")     return TileType::AudioMixer;
     return TileType::AppLauncher;
 }
 
