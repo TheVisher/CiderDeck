@@ -10,3 +10,6 @@ qrc_*
 CMakeLists.txt.user
 .idea/
 .vscode/
+pkg/src/
+pkg/pkg/
+pkg/*.pkg.tar.zst

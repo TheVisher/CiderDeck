@@ -1,6 +1,6 @@
 # Maintainer: Your Name <your@email.com>
 pkgname=ciderdeck
-pkgver=0.1.0.r13.6e0c0f9
+pkgver=0.1.0.r19.acb3770
 pkgrel=1
 pkgdesc='Touch-optimized dashboard for Corsair Xeneon Edge'
 arch=('x86_64')
