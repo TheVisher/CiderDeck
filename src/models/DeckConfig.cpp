@@ -79,6 +79,8 @@ void DeckConfig::load() {
     globalOpacity_ = global["globalOpacity"].toDouble(0.85);
     iconColorMode_ = global["iconColorMode"].toString(QStringLiteral("original"));
     showLabels_ = global["showLabels"].toBool(true);
+    globalTextScale_ = global["globalTextScale"].toDouble(1.0);
+    settingsTextScale_ = global["settingsTextScale"].toDouble(1.0);
     toastMonitor_ = global["toastMonitor"].toString();
     targetDisplay_ = global["targetDisplay"].toString();
 
@@ -111,6 +113,8 @@ void DeckConfig::save() {
     global["globalOpacity"] = globalOpacity_;
     global["iconColorMode"] = iconColorMode_;
     global["showLabels"] = showLabels_;
+    global["globalTextScale"] = globalTextScale_;
+    global["settingsTextScale"] = settingsTextScale_;
     global["toastMonitor"] = toastMonitor_;
     global["targetDisplay"] = targetDisplay_;
 
@@ -338,6 +342,8 @@ void DeckConfig::setGlobalBlurLevel(qreal v) { if (!qFuzzyCompare(globalBlurLeve
 void DeckConfig::setGlobalOpacity(qreal v) { if (!qFuzzyCompare(globalOpacity_, v)) { globalOpacity_ = v; emit appearanceChanged(); save(); } }
 void DeckConfig::setIconColorMode(const QString &v) { if (iconColorMode_ != v) { iconColorMode_ = v; emit appearanceChanged(); save(); } }
 void DeckConfig::setShowLabels(bool v) { if (showLabels_ != v) { showLabels_ = v; emit appearanceChanged(); save(); } }
+void DeckConfig::setGlobalTextScale(qreal v) { if (!qFuzzyCompare(globalTextScale_, v)) { globalTextScale_ = v; emit appearanceChanged(); save(); } }
+void DeckConfig::setSettingsTextScale(qreal v) { if (!qFuzzyCompare(settingsTextScale_, v)) { settingsTextScale_ = v; emit appearanceChanged(); save(); } }
 void DeckConfig::setToastMonitor(const QString &v) { if (toastMonitor_ != v) { toastMonitor_ = v; emit toastMonitorChanged(); save(); } }
 void DeckConfig::setTargetDisplay(const QString &v) { if (targetDisplay_ != v) { targetDisplay_ = v; emit targetDisplayChanged(); save(); } }
 void DeckConfig::setCurrentPage(int v) { if (currentPage_ != v && v >= 0 && v < pages_.size()) { currentPage_ = v; emit currentPageChanged(); } }

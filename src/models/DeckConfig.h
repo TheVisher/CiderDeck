@@ -35,6 +35,8 @@ class DeckConfig : public QObject {
     Q_PROPERTY(bool showLabels READ showLabels WRITE setShowLabels NOTIFY appearanceChanged)
     Q_PROPERTY(QString toastMonitor READ toastMonitor WRITE setToastMonitor NOTIFY toastMonitorChanged)
     Q_PROPERTY(QString targetDisplay READ targetDisplay WRITE setTargetDisplay NOTIFY targetDisplayChanged)
+    Q_PROPERTY(qreal globalTextScale READ globalTextScale WRITE setGlobalTextScale NOTIFY appearanceChanged)
+    Q_PROPERTY(qreal settingsTextScale READ settingsTextScale WRITE setSettingsTextScale NOTIFY appearanceChanged)
     Q_PROPERTY(int currentPage READ currentPage WRITE setCurrentPage NOTIFY currentPageChanged)
     Q_PROPERTY(int pageCount READ pageCount NOTIFY pagesChanged)
 
@@ -60,6 +62,8 @@ public:
     qreal globalOpacity() const { return globalOpacity_; }
     QString iconColorMode() const { return iconColorMode_; }
     bool showLabels() const { return showLabels_; }
+    qreal globalTextScale() const { return globalTextScale_; }
+    qreal settingsTextScale() const { return settingsTextScale_; }
     void setCardRadius(int v);
     void setTheme(const QString &v);
     void setFollowSystemTheme(bool v);
@@ -68,6 +72,8 @@ public:
     void setGlobalOpacity(qreal v);
     void setIconColorMode(const QString &v);
     void setShowLabels(bool v);
+    void setGlobalTextScale(qreal v);
+    void setSettingsTextScale(qreal v);
 
     // Display
     QString toastMonitor() const { return toastMonitor_; }
@@ -127,6 +133,8 @@ private:
     qreal globalOpacity_ = 0.85;
     QString iconColorMode_ = QStringLiteral("original");
     bool showLabels_ = true;
+    qreal globalTextScale_ = 1.0;
+    qreal settingsTextScale_ = 1.0;
 
     // Display
     QString toastMonitor_;

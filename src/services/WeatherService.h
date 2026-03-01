@@ -32,6 +32,7 @@ public:
     Q_INVOKABLE void refresh();
     Q_INVOKABLE void setLocations(const QStringList &locations);
     Q_INVOKABLE void setUnit(const QString &unit);
+    Q_INVOKABLE void setRefreshInterval(int minutes);
     Q_INVOKABLE void nextLocation();
     Q_INVOKABLE void previousLocation();
 

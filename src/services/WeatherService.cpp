@@ -45,6 +45,12 @@ void WeatherService::setCurrentLocationIndex(int idx) {
     }
 }
 
+void WeatherService::setRefreshInterval(int minutes) {
+    if (minutes > 0) {
+        refreshTimer_->setInterval(minutes * 60 * 1000);
+    }
+}
+
 void WeatherService::nextLocation() {
     if (locations_.size() > 1) {
         setCurrentLocationIndex((currentLocationIndex_ + 1) % locations_.size());
@@ -91,14 +97,14 @@ void WeatherService::parseResponse(const QByteArray &data) {
     condition_ = desc.isEmpty() ? QString() : desc[0].toObject()["value"].toString();
 
     auto weatherCode = cc["weatherCode"].toString().toInt();
-    // Map weather codes to icon names
-    if (weatherCode == 113) icon_ = "weather-clear";
-    else if (weatherCode == 116) icon_ = "weather-few-clouds";
-    else if (weatherCode >= 119 && weatherCode <= 122) icon_ = "weather-clouds";
-    else if (weatherCode >= 176 && weatherCode <= 299) icon_ = "weather-showers";
-    else if (weatherCode >= 302 && weatherCode <= 399) icon_ = "weather-snow";
-    else if (weatherCode >= 200 && weatherCode <= 232) icon_ = "weather-storm";
-    else icon_ = "weather-few-clouds";
+    // Map weather codes to Lucide icon names (in icons.qrc)
+    if (weatherCode == 113) icon_ = "sun";
+    else if (weatherCode == 116) icon_ = "cloud-sun";
+    else if (weatherCode >= 119 && weatherCode <= 122) icon_ = "cloud";
+    else if (weatherCode >= 176 && weatherCode <= 299) icon_ = "cloud-rain";
+    else if (weatherCode >= 302 && weatherCode <= 399) icon_ = "cloud-snow";
+    else if (weatherCode >= 200 && weatherCode <= 232) icon_ = "cloud-lightning";
+    else icon_ = "cloud";
 
     windSpeed_ = cc["windspeedMiles"].toString() + QStringLiteral(" mph");
     humidity_ = cc["humidity"].toString() + QStringLiteral("%");
