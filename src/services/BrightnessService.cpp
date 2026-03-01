@@ -95,6 +95,7 @@ void BrightnessService::enumerateDdcDisplays() {
     if (!detectProc.waitForFinished(15000)) return;
 
     QString detectOutput = detectProc.readAllStandardOutput();
+    if (detectOutput.isEmpty()) return;
 
     static QRegularExpression displayRe(QStringLiteral(R"(Display\s+(\d+))"));
     static QRegularExpression monitorRe(QStringLiteral(R"(Monitor:\s+(.+))"));
