@@ -32,5 +32,6 @@
         <file>ShowDesktopTile.qml</file>
         <file>OverviewTile.qml</file>
         <file>LucideIcon.qml</file>
+        <file>MarqueeText.qml</file>
     </qresource>
 </RCC>
