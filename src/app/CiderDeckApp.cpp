@@ -9,12 +9,19 @@
 #include <QGuiApplication>
 #include <QScreen>
 
+#include <QMenu>
+#include <QSystemTrayIcon>
+
 #ifdef HAVE_KF6WINDOWSYSTEM
 #include <KWindowEffects>
 #endif
 
 #ifdef HAVE_LAYERSHELLQT
 #include <LayerShellQt/Window>
+#endif
+
+#ifdef HAVE_KF6STATUSNOTIFIERITEM
+#include <KStatusNotifierItem>
 #endif
 
 #include "models/DeckConfig.h"
@@ -74,6 +81,26 @@ int CiderDeckApp::run(QApplication &app) {
     installedApps_ = new InstalledAppsModel(this);
     appFilterModel_ = new AppFilterModel(this);
     appFilterModel_->setSourceModel(installedApps_);
+
+    // System tray icon
+#ifdef HAVE_KF6STATUSNOTIFIERITEM
+    auto *sni = new KStatusNotifierItem(this);
+    sni->setCategory(KStatusNotifierItem::ApplicationStatus);
+    sni->setIconByName(QStringLiteral("ciderdeck"));
+    sni->setTitle(QStringLiteral("CiderDeck"));
+    sni->setToolTipTitle(QStringLiteral("CiderDeck"));
+    sni->setStandardActionsEnabled(true);
+#else
+    if (QSystemTrayIcon::isSystemTrayAvailable()) {
+        auto *tray = new QSystemTrayIcon(this);
+        tray->setIcon(QIcon::fromTheme(QStringLiteral("ciderdeck")));
+        tray->setToolTip(QStringLiteral("CiderDeck"));
+        auto *menu = new QMenu();
+        menu->addAction(QStringLiteral("Quit"), qApp, &QApplication::quit);
+        tray->setContextMenu(menu);
+        tray->show();
+    }
+#endif
 
     engine_ = new QQmlApplicationEngine(this);
 
