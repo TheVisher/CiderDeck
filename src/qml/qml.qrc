@@ -31,5 +31,6 @@
         <file>MixerOverlay.qml</file>
         <file>ShowDesktopTile.qml</file>
         <file>OverviewTile.qml</file>
+        <file>LucideIcon.qml</file>
     </qresource>
 </RCC>

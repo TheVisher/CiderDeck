@@ -85,6 +85,7 @@ add_executable(ciderdeck
   src/viewmodels/InstalledAppsModel.cpp
 
   src/qml/qml.qrc
+  src/resources/icons.qrc
 )
 
 target_include_directories(ciderdeck PRIVATE src)
