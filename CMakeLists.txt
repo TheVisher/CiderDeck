@@ -54,8 +54,6 @@ add_executable(ciderdeck
   src/services/AppLaunchManager.cpp
   src/services/AudioManager.h
   src/services/AudioManager.cpp
-  src/services/AudioMixerService.h
-  src/services/AudioMixerService.cpp
   src/services/MprisManager.h
   src/services/MprisManager.cpp
   src/services/WeatherService.h
@@ -85,7 +83,6 @@ add_executable(ciderdeck
   src/viewmodels/InstalledAppsModel.cpp
 
   src/qml/qml.qrc
-  src/resources/icons.qrc
 )
 
 target_include_directories(ciderdeck PRIVATE src)
