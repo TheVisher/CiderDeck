@@ -12,6 +12,7 @@
 #ifdef HAVE_KF6PULSEAUDIOQT
 #include <PulseAudioQt/context.h>
 #include <PulseAudioQt/models.h>
+#include <PulseAudioQt/client.h>
 #include <PulseAudioQt/sinkinput.h>
 #include <PulseAudioQt/source.h>
 #endif
@@ -535,7 +536,17 @@ QStringList AudioMixerService::activeAudioApps() const
         auto *si = idx.data(PulseAudioQt::AbstractModel::PulseObjectRole)
                        .value<PulseAudioQt::SinkInput *>();
         if (!si) continue;
-        const QString name = si->name();
+        // Use client name to match findStreamsByApp() resolution order
+        QString name;
+        if (si->client()) {
+            name = si->client()->name();
+        }
+        if (name.isEmpty()) {
+            name = si->properties().value(QStringLiteral("application.name")).toString();
+        }
+        if (name.isEmpty()) {
+            name = si->name();
+        }
         if (!name.isEmpty() && !result.contains(name)) {
             result.append(name);
         }
