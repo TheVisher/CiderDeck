@@ -14,10 +14,13 @@ static const QString kPropertiesInterface = QStringLiteral("org.freedesktop.DBus
 
 MprisManager::MprisManager(QObject *parent)
     : QObject(parent) {
-    watcher_ = new QDBusServiceWatcher(QString(), QDBusConnection::sessionBus(),
-                                        QDBusServiceWatcher::WatchForOwnerChange, this);
-    connect(watcher_, &QDBusServiceWatcher::serviceRegistered, this, &MprisManager::onServiceRegistered);
-    connect(watcher_, &QDBusServiceWatcher::serviceUnregistered, this, &MprisManager::onServiceUnregistered);
+    // Watch for ANY new/removed D-Bus services (not just pre-registered ones)
+    QDBusConnection::sessionBus().connect(
+        QStringLiteral("org.freedesktop.DBus"),
+        QStringLiteral("/org/freedesktop/DBus"),
+        QStringLiteral("org.freedesktop.DBus"),
+        QStringLiteral("NameOwnerChanged"),
+        this, SLOT(onNameOwnerChanged(QString,QString,QString)));
 
     positionTimer_ = new QTimer(this);
     positionTimer_->setInterval(500);
@@ -44,7 +47,6 @@ void MprisManager::discoverPlayers() {
             QString name = service.mid(kMprisPrefix.length());
             playerNames_.append(name);
             serviceMap_[name] = service;
-            watcher_->addWatchedService(service);
         }
     }
 
@@ -94,31 +96,31 @@ void MprisManager::setCurrentPlayer(const QString &name) {
     }
 }
 
-void MprisManager::onServiceRegistered(const QString &service) {
+void MprisManager::onNameOwnerChanged(const QString &service,
+                                       const QString &oldOwner,
+                                       const QString &newOwner) {
     if (!service.startsWith(kMprisPrefix)) return;
 
     QString name = service.mid(kMprisPrefix.length());
-    if (!playerNames_.contains(name)) {
-        playerNames_.append(name);
-        serviceMap_[name] = service;
+
+    if (oldOwner.isEmpty() && !newOwner.isEmpty()) {
+        // New player appeared
+        if (!playerNames_.contains(name)) {
+            playerNames_.append(name);
+            serviceMap_[name] = service;
+            emit playersChanged();
+        }
+        if (currentPlayer_.isEmpty()) {
+            selectBestPlayer();
+        }
+    } else if (!oldOwner.isEmpty() && newOwner.isEmpty()) {
+        // Player disappeared
+        playerNames_.removeAll(name);
+        serviceMap_.remove(name);
         emit playersChanged();
-    }
-
-    if (currentPlayer_.isEmpty()) {
-        selectBestPlayer();
-    }
-}
-
-void MprisManager::onServiceUnregistered(const QString &service) {
-    if (!service.startsWith(kMprisPrefix)) return;
-
-    QString name = service.mid(kMprisPrefix.length());
-    playerNames_.removeAll(name);
-    serviceMap_.remove(name);
-    emit playersChanged();
-
-    if (currentPlayer_ == name) {
-        selectBestPlayer();
+        if (currentPlayer_ == name) {
+            selectBestPlayer();
+        }
     }
 }
 

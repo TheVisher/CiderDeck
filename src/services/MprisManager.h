@@ -1,7 +1,6 @@
 #pragma once
 
 #include <QObject>
-#include <QDBusServiceWatcher>
 #include <QDBusInterface>
 #include <QTimer>
 #include <QStringList>
@@ -80,8 +79,7 @@ signals:
     void controlsChanged();
 
 private slots:
-    void onServiceRegistered(const QString &service);
-    void onServiceUnregistered(const QString &service);
+    void onNameOwnerChanged(const QString &service, const QString &oldOwner, const QString &newOwner);
     void pollPosition();
     void onPropertiesChanged(const QString &interface, const QVariantMap &changed, const QStringList &invalidated);
 
@@ -94,7 +92,6 @@ private:
     QString serviceName() const;
     QDBusInterface *playerInterface();
 
-    QDBusServiceWatcher *watcher_ = nullptr;
     QTimer *positionTimer_ = nullptr;
 
     QStringList playerNames_;
