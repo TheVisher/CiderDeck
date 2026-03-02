@@ -152,7 +152,7 @@ include(GNUInstallDirs)
 
 install(TARGETS ciderdeck RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
 install(FILES ciderdeck.desktop DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/applications")
-install(FILES ciderdeck.desktop DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/autostart")
+install(FILES ciderdeck.desktop DESTINATION "/etc/xdg/autostart")
 install(FILES kwin-scripts/ciderdeck-bridge.js
         DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/ciderdeck/kwin-scripts")
 install(FILES data/icons/ciderdeck.svg
