@@ -65,7 +65,7 @@ Card {
     function openPlayer() {
         var desktop = mprisManager.desktopEntry
         if (desktop)
-            appLaunchManager.launchOrRaise(desktop, "", "", true)
+            appLaunchManager.launch(desktop, "", "", true)
     }
 
     // ── Empty state when no player running ──

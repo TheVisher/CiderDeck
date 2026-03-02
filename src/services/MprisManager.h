@@ -53,6 +53,11 @@ public:
     Q_INVOKABLE void previous();
     Q_INVOKABLE void seek(qlonglong offsetUs);
     Q_INVOKABLE void setPosition(qlonglong positionUs);
+    Q_INVOKABLE void selectNextPlayer();
+    Q_INVOKABLE void selectPreviousPlayer();
+
+    Q_PROPERTY(QString desktopEntry READ desktopEntry NOTIFY currentPlayerChanged)
+    QString desktopEntry() const;
 
 signals:
     void playersChanged();

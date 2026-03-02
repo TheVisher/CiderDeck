@@ -267,6 +267,38 @@ void MprisManager::setPosition(qlonglong positionUs) {
     if (iface) { iface->call("SetPosition", QDBusObjectPath(trackId_), positionUs); delete iface; }
 }
 
+void MprisManager::selectNextPlayer() {
+    if (playerNames_.size() <= 1) return;
+    int idx = playerNames_.indexOf(currentPlayer_);
+    idx = (idx + 1) % playerNames_.size();
+    setCurrentPlayer(playerNames_[idx]);
+}
+
+void MprisManager::selectPreviousPlayer() {
+    if (playerNames_.size() <= 1) return;
+    int idx = playerNames_.indexOf(currentPlayer_);
+    idx = (idx - 1 + playerNames_.size()) % playerNames_.size();
+    setCurrentPlayer(playerNames_[idx]);
+}
+
+QString MprisManager::desktopEntry() const {
+    if (currentPlayer_.isEmpty()) return {};
+
+    // Query the org.mpris.MediaPlayer2 interface for DesktopEntry
+    QDBusInterface props(serviceMap_.value(currentPlayer_),
+                         QStringLiteral("/org/mpris/MediaPlayer2"),
+                         kPropertiesInterface, QDBusConnection::sessionBus());
+    QDBusReply<QVariant> reply = props.call("Get",
+        QStringLiteral("org.mpris.MediaPlayer2"), QStringLiteral("DesktopEntry"));
+    if (reply.isValid()) {
+        QString entry = reply.value().toString();
+        if (!entry.isEmpty() && !entry.endsWith(QStringLiteral(".desktop")))
+            entry += QStringLiteral(".desktop");
+        return entry;
+    }
+    return {};
+}
+
 bool MprisManager::isSpotify() const {
     return currentPlayer_.toLower().contains("spotify");
 }
