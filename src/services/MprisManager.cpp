@@ -156,6 +156,11 @@ void MprisManager::onPropertiesChanged(const QString &interface,
     updateBool("CanPlay", canPlay_);
     updateBool("CanPause", canPause_);
     updateBool("CanSeek", canSeek_);
+    updateBool("Shuffle", shuffle_);
+    if (changed.contains("LoopStatus")) {
+        QString ls = changed["LoopStatus"].toString();
+        if (loopStatus_ != ls) { loopStatus_ = ls; controlsChanged = true; }
+    }
     if (controlsChanged) emit this->controlsChanged();
 }
 
@@ -222,6 +227,14 @@ void MprisManager::fetchControls() {
     update(canPlay_, getBool("CanPlay"));
     update(canPause_, getBool("CanPause"));
     update(canSeek_, getBool("CanSeek"));
+    update(shuffle_, getBool("Shuffle"));
+
+    // Fetch LoopStatus (string, not bool)
+    QDBusReply<QVariant> loopReply = props.call("Get", kPlayerInterface, QStringLiteral("LoopStatus"));
+    if (loopReply.isValid()) {
+        QString ls = loopReply.value().toString();
+        if (loopStatus_ != ls) { loopStatus_ = ls; changed = true; }
+    }
 
     if (changed) emit controlsChanged();
 }
@@ -279,6 +292,46 @@ void MprisManager::selectPreviousPlayer() {
     int idx = playerNames_.indexOf(currentPlayer_);
     idx = (idx - 1 + playerNames_.size()) % playerNames_.size();
     setCurrentPlayer(playerNames_[idx]);
+}
+
+void MprisManager::toggleShuffle() {
+    auto *iface = playerInterface();
+    if (!iface) return;
+    // Toggle via D-Bus property
+    QDBusInterface props(serviceName(), QStringLiteral("/org/mpris/MediaPlayer2"),
+                         kPropertiesInterface, QDBusConnection::sessionBus());
+    props.call("Set", kPlayerInterface, QStringLiteral("Shuffle"),
+               QVariant::fromValue(QDBusVariant(!shuffle_)));
+    shuffle_ = !shuffle_;
+    emit controlsChanged();
+    delete iface;
+}
+
+void MprisManager::cycleLoopStatus() {
+    QDBusInterface props(serviceName(), QStringLiteral("/org/mpris/MediaPlayer2"),
+                         kPropertiesInterface, QDBusConnection::sessionBus());
+    QString next;
+    if (loopStatus_ == "None") next = "Track";
+    else if (loopStatus_ == "Track") next = "Playlist";
+    else next = "None";
+    props.call("Set", kPlayerInterface, QStringLiteral("LoopStatus"),
+               QVariant::fromValue(QDBusVariant(next)));
+    loopStatus_ = next;
+    emit controlsChanged();
+}
+
+void MprisManager::skipForward(int seconds) {
+    seek(static_cast<qlonglong>(seconds) * 1000000LL);
+}
+
+void MprisManager::skipBackward(int seconds) {
+    seek(-static_cast<qlonglong>(seconds) * 1000000LL);
+}
+
+QString MprisManager::playerIcon() const {
+    if (currentPlayer_.isEmpty()) return {};
+    // Return the player name as an icon name — the AppIconProvider resolves desktop files
+    return currentPlayer_ + QStringLiteral(".desktop");
 }
 
 QString MprisManager::desktopEntry() const {

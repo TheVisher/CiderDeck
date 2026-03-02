@@ -25,7 +25,11 @@ class MprisManager : public QObject {
     Q_PROPERTY(bool canPlay READ canPlay NOTIFY controlsChanged)
     Q_PROPERTY(bool canPause READ canPause NOTIFY controlsChanged)
     Q_PROPERTY(bool canSeek READ canSeek NOTIFY controlsChanged)
+    Q_PROPERTY(bool shuffle READ shuffle NOTIFY controlsChanged)
+    Q_PROPERTY(QString loopStatus READ loopStatus NOTIFY controlsChanged)
     Q_PROPERTY(bool isSpotify READ isSpotify NOTIFY currentPlayerChanged)
+    Q_PROPERTY(QString playerIcon READ playerIcon NOTIFY currentPlayerChanged)
+    Q_PROPERTY(int playerCount READ playerCount NOTIFY playersChanged)
 
 public:
     explicit MprisManager(QObject *parent = nullptr);
@@ -46,7 +50,11 @@ public:
     bool canPlay() const { return canPlay_; }
     bool canPause() const { return canPause_; }
     bool canSeek() const { return canSeek_; }
+    bool shuffle() const { return shuffle_; }
+    QString loopStatus() const { return loopStatus_; }
     bool isSpotify() const;
+    QString playerIcon() const;
+    int playerCount() const { return playerNames_.size(); }
 
     Q_INVOKABLE void playPause();
     Q_INVOKABLE void next();
@@ -55,6 +63,10 @@ public:
     Q_INVOKABLE void setPosition(qlonglong positionUs);
     Q_INVOKABLE void selectNextPlayer();
     Q_INVOKABLE void selectPreviousPlayer();
+    Q_INVOKABLE void toggleShuffle();
+    Q_INVOKABLE void cycleLoopStatus();
+    Q_INVOKABLE void skipForward(int seconds);
+    Q_INVOKABLE void skipBackward(int seconds);
 
     Q_PROPERTY(QString desktopEntry READ desktopEntry NOTIFY currentPlayerChanged)
     QString desktopEntry() const;
@@ -103,6 +115,8 @@ private:
     bool canPlay_ = false;
     bool canPause_ = false;
     bool canSeek_ = false;
+    bool shuffle_ = false;
+    QString loopStatus_ = QStringLiteral("None");
 };
 
 } // namespace ciderdeck
