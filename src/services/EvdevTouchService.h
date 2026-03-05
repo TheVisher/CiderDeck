@@ -5,6 +5,7 @@
 
 class QWindow;
 class QSocketNotifier;
+class QTimer;
 
 namespace ciderdeck {
 
@@ -30,11 +31,15 @@ signals:
 private:
     QString detectDevice();
     void onReadReady();
+    void reconnect();
+    void disableUsbAutosuspend();
 
     QWindow *window_ = nullptr;
     int fd_ = -1;
     QSocketNotifier *notifier_ = nullptr;
+    QTimer *reconnectTimer_ = nullptr;
     QString devicePath_;
+    QString lastDevicePath_; // remembered across reconnects
 
     // Axis ranges from EVIOCGABS
     int absXMin_ = 0;

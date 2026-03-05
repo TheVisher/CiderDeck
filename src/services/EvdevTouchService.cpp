@@ -3,13 +3,16 @@
 #include <QCoreApplication>
 #include <QMouseEvent>
 #include <QSocketNotifier>
+#include <QTimer>
 #include <QWindow>
 #include <QDebug>
+#include <QDir>
 
 #include <linux/input.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
+#include <cerrno>
 
 namespace ciderdeck {
 
@@ -17,6 +20,9 @@ EvdevTouchService::EvdevTouchService(QWindow *window, QObject *parent)
     : QObject(parent)
     , window_(window)
 {
+    reconnectTimer_ = new QTimer(this);
+    reconnectTimer_->setSingleShot(true);
+    connect(reconnectTimer_, &QTimer::timeout, this, &EvdevTouchService::reconnect);
 }
 
 EvdevTouchService::~EvdevTouchService()
@@ -46,6 +52,31 @@ QString EvdevTouchService::detectDevice()
     return {};
 }
 
+void EvdevTouchService::disableUsbAutosuspend()
+{
+    // Find the USB device's power/control file and set it to "on"
+    // to prevent the kernel from suspending the touchscreen.
+    QDir inputDir(QStringLiteral("/sys/class/input"));
+    const QString eventName = QFileInfo(devicePath_).fileName(); // e.g. "event22"
+    const QString deviceLink = QStringLiteral("/sys/class/input/%1/device").arg(eventName);
+
+    // Walk up to find the USB device: device -> ../.. until we find power/control
+    QString path = QFileInfo(deviceLink).canonicalFilePath();
+    for (int i = 0; i < 6 && !path.isEmpty(); ++i) {
+        const QString powerControl = path + QStringLiteral("/power/control");
+        if (QFile::exists(powerControl)) {
+            QFile f(powerControl);
+            if (f.open(QIODevice::WriteOnly)) {
+                f.write("on");
+                f.close();
+                qInfo() << "[EvdevTouchService] Disabled USB autosuspend via" << powerControl;
+            }
+            return;
+        }
+        path = QFileInfo(path).absolutePath(); // go up one level
+    }
+}
+
 bool EvdevTouchService::start(const QString &devicePath)
 {
     if (fd_ >= 0) {
@@ -55,7 +86,7 @@ bool EvdevTouchService::start(const QString &devicePath)
 
     QString path = devicePath;
     if (path.isEmpty())
-        path = detectDevice();
+        path = lastDevicePath_.isEmpty() ? detectDevice() : lastDevicePath_;
 
     if (path.isEmpty()) {
         qWarning() << "[EvdevTouchService] No touchscreen device found — touch falls back to compositor";
@@ -92,8 +123,11 @@ bool EvdevTouchService::start(const QString &devicePath)
     }
 
     devicePath_ = path;
+    lastDevicePath_ = path;
     notifier_ = new QSocketNotifier(fd_, QSocketNotifier::Read, this);
     connect(notifier_, &QSocketNotifier::activated, this, &EvdevTouchService::onReadReady);
+
+    disableUsbAutosuspend();
 
     qInfo() << "[EvdevTouchService] Opened" << path
             << "X range:" << absXMin_ << "-" << absXMax_
@@ -106,6 +140,8 @@ bool EvdevTouchService::start(const QString &devicePath)
 
 void EvdevTouchService::stop()
 {
+    reconnectTimer_->stop();
+
     if (fd_ < 0)
         return;
 
@@ -123,10 +159,59 @@ void EvdevTouchService::stop()
     emit devicePathChanged();
 }
 
+void EvdevTouchService::reconnect()
+{
+    qInfo() << "[EvdevTouchService] Attempting reconnect...";
+    // stop() without clearing lastDevicePath_ so start() can reuse it
+    if (fd_ >= 0) {
+        delete notifier_;
+        notifier_ = nullptr;
+        ::ioctl(fd_, EVIOCGRAB, 0);
+        ::close(fd_);
+        fd_ = -1;
+        devicePath_.clear();
+        touchDown_ = false;
+        pressed_ = false;
+    }
+
+    // Try the remembered path first, fall back to re-detection
+    if (!start(lastDevicePath_)) {
+        // Device might have a new event number after USB reset
+        lastDevicePath_.clear();
+        if (!start()) {
+            qWarning() << "[EvdevTouchService] Reconnect failed — retrying in 3s";
+            reconnectTimer_->start(3000);
+        }
+    }
+}
+
 void EvdevTouchService::onReadReady()
 {
     struct input_event ev;
-    while (::read(fd_, &ev, sizeof(ev)) == static_cast<ssize_t>(sizeof(ev))) {
+    for (;;) {
+        ssize_t n = ::read(fd_, &ev, sizeof(ev));
+        if (n == static_cast<ssize_t>(sizeof(ev))) {
+            // Successfully read an event — process it below
+        } else if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+            break; // No more events available right now
+        } else {
+            // Read error (ENODEV, EIO, etc.) or unexpected short read — device is gone
+            qWarning() << "[EvdevTouchService] Read error (errno:" << errno << ") — scheduling reconnect";
+            // Send a release if we had a press in flight
+            if (pressed_ && window_) {
+                const QPointF lastPos(
+                    static_cast<qreal>(currentX_ - absXMin_) * window_->width() / (absXMax_ - absXMin_),
+                    static_cast<qreal>(currentY_ - absYMin_) * window_->height() / (absYMax_ - absYMin_));
+                QMouseEvent release(QEvent::MouseButtonRelease, lastPos, window_->mapToGlobal(lastPos),
+                                    Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+                QCoreApplication::sendEvent(window_, &release);
+            }
+            pressed_ = false;
+            touchDown_ = false;
+            reconnectTimer_->start(1000);
+            return;
+        }
+
         switch (ev.type) {
         case EV_ABS:
             if (ev.code == ABS_X)
