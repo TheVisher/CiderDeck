@@ -74,6 +74,8 @@ add_executable(ciderdeck
   src/services/TimerService.cpp
   src/services/KWinDBusClient.h
   src/services/KWinDBusClient.cpp
+  src/services/EvdevTouchService.h
+  src/services/EvdevTouchService.cpp
 
   src/viewmodels/TileGridModel.h
   src/viewmodels/TileGridModel.cpp

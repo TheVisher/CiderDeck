@@ -41,6 +41,7 @@
 #include "services/ClipboardService.h"
 #include "services/TimerService.h"
 #include "services/KWinDBusClient.h"
+#include "services/EvdevTouchService.h"
 #include "viewmodels/TileGridModel.h"
 #include "viewmodels/EditModeController.h"
 #include "viewmodels/ToastModel.h"
@@ -152,6 +153,12 @@ int CiderDeckApp::run(QApplication &app) {
             mainWindow_ = window;
             configureWindow(window);
             window->setVisible(true);
+
+            // Direct evdev touch input for the Xeneon Edge touchscreen.
+            // Bypasses the compositor so touch works even when Input Leap
+            // has the cursor on another machine.
+            evdevTouch_ = new EvdevTouchService(window, this);
+            evdevTouch_->start();
         }
     });
 

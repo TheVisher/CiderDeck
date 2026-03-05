@@ -25,6 +25,7 @@ class ClipboardService;
 class TimerService;
 class AudioMixerService;
 class KWinDBusClient;
+class EvdevTouchService;
 class TileGridModel;
 class EditModeController;
 class ToastModel;
@@ -68,6 +69,7 @@ private:
     InstalledAppsModel *installedApps_ = nullptr;
     AppFilterModel *appFilterModel_ = nullptr;
     QWindow *mainWindow_ = nullptr;
+    EvdevTouchService *evdevTouch_ = nullptr;
 };
 
 } // namespace ciderdeck
