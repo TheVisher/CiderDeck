@@ -13,3 +13,4 @@ CMakeLists.txt.user
 pkg/src/
 pkg/pkg/
 pkg/*.pkg.tar.zst
+pkg/ciderdeck/
