@@ -28,6 +28,9 @@ signals:
     void activeChanged();
     void devicePathChanged();
 
+private slots:
+    void onSystemWake(bool suspending);
+
 private:
     QString detectDevice();
     void onReadReady();

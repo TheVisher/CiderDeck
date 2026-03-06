@@ -1,6 +1,8 @@
 #include "EvdevTouchService.h"
 
 #include <QCoreApplication>
+#include <QDBusConnection>
+#include <QDBusMessage>
 #include <QMouseEvent>
 #include <QSocketNotifier>
 #include <QTimer>
@@ -23,6 +25,14 @@ EvdevTouchService::EvdevTouchService(QWindow *window, QObject *parent)
     reconnectTimer_ = new QTimer(this);
     reconnectTimer_->setSingleShot(true);
     connect(reconnectTimer_, &QTimer::timeout, this, &EvdevTouchService::reconnect);
+
+    // Listen for system sleep/wake via systemd-logind
+    QDBusConnection::systemBus().connect(
+        QStringLiteral("org.freedesktop.login1"),
+        QStringLiteral("/org/freedesktop/login1"),
+        QStringLiteral("org.freedesktop.login1.Manager"),
+        QStringLiteral("PrepareForSleep"),
+        this, SLOT(onSystemWake(bool)));
 }
 
 EvdevTouchService::~EvdevTouchService()
@@ -258,6 +268,18 @@ void EvdevTouchService::onReadReady()
             break;
         }
     }
+}
+
+void EvdevTouchService::onSystemWake(bool suspending)
+{
+    if (suspending)
+        return; // going to sleep — nothing to do
+
+    // System just woke up. The USB device likely reset, so the fd is stale
+    // even if no read error occurred. Force a reconnect after a short delay
+    // to give the USB subsystem time to re-enumerate.
+    qInfo() << "[EvdevTouchService] System wake detected — reconnecting in 2s";
+    reconnectTimer_->start(2000);
 }
 
 } // namespace ciderdeck
