@@ -83,15 +83,43 @@ Flickable {
             RowLayout {
                 spacing: 8
                 Slider {
-                    from: -0.05; to: 1; stepSize: 0.05
-                    value: tileSettings.tileData.opacity !== undefined ? tileSettings.tileData.opacity : -1
-                    onMoved: tileSettings.saveProperty("opacity", value < 0 ? -1 : value)
-                    implicitWidth: 140
+                    id: tileOpacitySlider
+                    from: 0; to: 1; stepSize: 0.05
+                    value: tileSettings.tileData.opacity !== undefined && tileSettings.tileData.opacity >= 0
+                           ? tileSettings.tileData.opacity : deckConfig.globalOpacity
+                    onMoved: tileSettings.saveProperty("opacity", Math.round(value * 100) / 100)
+                    implicitWidth: 112
                 }
                 Text {
-                    text: (tileSettings.tileData.opacity || -1) < 0 ? "Global" : Math.round((tileSettings.tileData.opacity || 0) * 100) + "%"
+                    text: tileSettings.tileData.opacity === undefined || tileSettings.tileData.opacity < 0
+                          ? "Global"
+                          : Math.round(tileSettings.tileData.opacity * 100) + "%"
                     color: themeManager.secondaryTextColor
                     font.pixelSize: 12 * tileSettings.ts
+                    Layout.preferredWidth: 42
+                    horizontalAlignment: Text.AlignRight
+                }
+                Button {
+                    text: "Global"
+                    flat: true
+                    highlighted: tileSettings.tileData.opacity === undefined || tileSettings.tileData.opacity < 0
+                    onClicked: tileSettings.saveProperty("opacity", -1)
+                    contentItem: Text {
+                        text: parent.text
+                        color: parent.highlighted ? themeManager.accentColor : themeManager.textColor
+                        font.pixelSize: 11 * tileSettings.ts
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    background: Rectangle {
+                        implicitWidth: 48; implicitHeight: 24; radius: 4
+                        color: parent.highlighted
+                               ? Qt.rgba(themeManager.accentColor.r, themeManager.accentColor.g,
+                                         themeManager.accentColor.b, 0.15)
+                               : (parent.hovered ? themeManager.overlayColor : "transparent")
+                        border.width: 1
+                        border.color: parent.highlighted ? themeManager.accentColor : themeManager.borderColor
+                    }
                 }
             }
         }
@@ -693,7 +721,7 @@ Flickable {
                 label: "Device label"
                 visible: {
                     var devs = tileSettings.settings.volumeDevices
-                    return devs && devs.length > 0
+                    return devs !== undefined && devs !== null && devs.length > 0
                 }
                 RowLayout {
                     spacing: 6
@@ -1399,9 +1427,17 @@ Flickable {
             Rectangle { Layout.fillWidth: true; height: 1; color: themeManager.borderColor; Layout.topMargin: 4 }
 
             Text {
-                text: "Album Art"
+                text: "Background Artwork"
                 color: themeManager.secondaryTextColor
                 font.pixelSize: 13 * tileSettings.ts
+            }
+
+            SettingsRow {
+                label: "Show artwork"
+                Switch {
+                    checked: tileSettings.settings.showBackgroundArt !== false
+                    onToggled: tileSettings.saveSetting("showBackgroundArt", checked)
+                }
             }
 
             SettingsRow {
@@ -1423,12 +1459,12 @@ Flickable {
             }
 
             SettingsRow {
-                label: "Art opacity"
+                label: "Artwork opacity"
                 RowLayout {
                     spacing: 8
                     Slider {
                         id: artOpacitySlider
-                        from: 0.1; to: 1.0; stepSize: 0.05
+                        from: 0.0; to: 1.0; stepSize: 0.05
                         value: tileSettings.settings.artPeakOpacity !== undefined ? tileSettings.settings.artPeakOpacity : 0.5
                         onMoved: tileSettings.saveSetting("artPeakOpacity", Math.round(value * 100) / 100)
                         implicitWidth: 120
@@ -1464,13 +1500,21 @@ Flickable {
             Rectangle { Layout.fillWidth: true; height: 1; color: themeManager.borderColor; Layout.topMargin: 4 }
 
             Text {
-                text: "Info Layout"
+                text: "Cover & Track Info"
                 color: themeManager.secondaryTextColor
                 font.pixelSize: 13 * tileSettings.ts
             }
 
             SettingsRow {
-                label: "Layout"
+                label: "Cover thumbnail"
+                Switch {
+                    checked: tileSettings.settings.showCoverThumbnail !== false
+                    onToggled: tileSettings.saveSetting("showCoverThumbnail", checked)
+                }
+            }
+
+            SettingsRow {
+                label: "Arrangement"
                 ComboBox {
                     id: infoLayoutCombo
                     model: ["Left", "Right", "Top", "Bottom", "Center", "Art Only", "Text Only"]
@@ -1488,7 +1532,8 @@ Flickable {
             }
 
             SettingsRow {
-                label: "Art size"
+                label: "Cover size"
+                visible: tileSettings.settings.showCoverThumbnail !== false
                 RowLayout {
                     spacing: 8
                     Slider {
@@ -1502,6 +1547,83 @@ Flickable {
                         text: artSizeSlider.value === 0 ? "Auto" : Math.round(artSizeSlider.value) + "px"
                         color: themeManager.secondaryTextColor
                         font.pixelSize: 12 * tileSettings.ts
+                    }
+                }
+            }
+
+            SettingsRow {
+                label: "Text align"
+                RowLayout {
+                    spacing: 6
+                    Repeater {
+                        model: [
+                            { value: "left", label: "Left" },
+                            { value: "center", label: "Center" },
+                            { value: "right", label: "Right" }
+                        ]
+                        Button {
+                            required property var modelData
+                            text: modelData.label
+                            flat: true
+                            highlighted: {
+                                var saved = tileSettings.settings.textHorizontalPosition
+                                var fallback = ["top", "bottom", "center", "text-only"]
+                                    .indexOf(tileSettings.settings.infoLayout || "left") >= 0 ? "center" : "left"
+                                return (saved || fallback) === modelData.value
+                            }
+                            onClicked: tileSettings.saveSetting("textHorizontalPosition", modelData.value)
+                            contentItem: Text {
+                                text: parent.text
+                                color: parent.highlighted ? themeManager.accentColor : themeManager.textColor
+                                font.pixelSize: 12 * tileSettings.ts
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                            background: Rectangle {
+                                implicitWidth: 50; implicitHeight: 26; radius: 6
+                                color: parent.highlighted
+                                       ? Qt.rgba(themeManager.accentColor.r, themeManager.accentColor.g,
+                                                 themeManager.accentColor.b, 0.15) : "transparent"
+                                border.width: 1
+                                border.color: parent.highlighted ? themeManager.accentColor : themeManager.borderColor
+                            }
+                        }
+                    }
+                }
+            }
+
+            SettingsRow {
+                label: "Text position"
+                RowLayout {
+                    spacing: 6
+                    Repeater {
+                        model: [
+                            { value: "top", label: "Top" },
+                            { value: "center", label: "Center" },
+                            { value: "bottom", label: "Bottom" }
+                        ]
+                        Button {
+                            required property var modelData
+                            text: modelData.label
+                            flat: true
+                            highlighted: (tileSettings.settings.textVerticalPosition || "center") === modelData.value
+                            onClicked: tileSettings.saveSetting("textVerticalPosition", modelData.value)
+                            contentItem: Text {
+                                text: parent.text
+                                color: parent.highlighted ? themeManager.accentColor : themeManager.textColor
+                                font.pixelSize: 12 * tileSettings.ts
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                            background: Rectangle {
+                                implicitWidth: 50; implicitHeight: 26; radius: 6
+                                color: parent.highlighted
+                                       ? Qt.rgba(themeManager.accentColor.r, themeManager.accentColor.g,
+                                                 themeManager.accentColor.b, 0.15) : "transparent"
+                                border.width: 1
+                                border.color: parent.highlighted ? themeManager.accentColor : themeManager.borderColor
+                            }
+                        }
                     }
                 }
             }
@@ -1631,6 +1753,23 @@ Flickable {
                     }
                 }
             }
+
+            SettingsRow {
+                label: "Control alignment"
+                ComboBox {
+                    model: ["Left", "Center", "Right"]
+                    property var alignmentValues: ["left", "center", "right"]
+                    currentIndex: {
+                        var alignment = tileSettings.settings.controlsAlignment || "center"
+                        var index = alignmentValues.indexOf(alignment)
+                        return index >= 0 ? index : 1
+                    }
+                    onActivated: (index) => {
+                        tileSettings.saveSetting("controlsAlignment", alignmentValues[index])
+                    }
+                    implicitWidth: 140
+                }
+            }
         }
 
         // Screenshot
@@ -1726,6 +1865,47 @@ Flickable {
             }
         }
 
+        // Process Manager
+        ColumnLayout {
+            spacing: 10
+            visible: tileSettings.tileType === "process_manager"
+            Layout.fillWidth: true
+
+            Text {
+                text: "Process Manager"
+                color: themeManager.accentColor
+                font.pixelSize: 15 * tileSettings.ts
+                font.bold: true
+            }
+
+            SettingsRow {
+                label: "Show memory"
+                Switch {
+                    checked: tileSettings.settings.showMemory !== false
+                    onToggled: tileSettings.saveSetting("showMemory", checked)
+                }
+            }
+
+            SettingsRow {
+                label: "Process rows"
+                SpinBox {
+                    from: 3
+                    to: 30
+                    value: tileSettings.settings.maxProcesses || 15
+                    onValueModified: tileSettings.saveSetting("maxProcesses", value)
+                    implicitWidth: 90
+                }
+            }
+
+            SettingsRow {
+                label: "Terminate buttons"
+                Switch {
+                    checked: tileSettings.settings.allowTerminate === true
+                    onToggled: tileSettings.saveSetting("allowTerminate", checked)
+                }
+            }
+        }
+
         // System Monitor
         ColumnLayout {
             spacing: 10
@@ -1740,26 +1920,44 @@ Flickable {
             }
 
             SettingsRow {
-                label: "Show CPU bar"
-                Switch {
-                    checked: tileSettings.settings.showCpuBar !== false
-                    onToggled: tileSettings.saveSetting("showCpuBar", checked)
+                label: "Metric"
+                ComboBox {
+                    model: ["Overview", "CPU", "GPU", "Memory", "Storage", "Network"]
+                    property var modeValues: ["overview", "cpu", "gpu", "memory", "storage", "network"]
+                    currentIndex: {
+                        var mode = tileSettings.settings.monitorMode || "overview"
+                        var index = modeValues.indexOf(mode)
+                        return index >= 0 ? index : 0
+                    }
+                    onActivated: (index) => tileSettings.saveSetting("monitorMode", modeValues[index])
+                    implicitWidth: 150
                 }
             }
 
             SettingsRow {
-                label: "Show RAM bar"
+                label: "History graph"
+                visible: (tileSettings.settings.monitorMode || "overview") !== "overview"
                 Switch {
-                    checked: tileSettings.settings.showRamBar !== false
-                    onToggled: tileSettings.saveSetting("showRamBar", checked)
+                    checked: tileSettings.settings.showGraph !== false
+                    onToggled: tileSettings.saveSetting("showGraph", checked)
                 }
             }
 
             SettingsRow {
-                label: "Show RAM detail"
+                label: "Usage bar"
+                visible: ["cpu", "gpu", "memory", "storage"]
+                    .indexOf(tileSettings.settings.monitorMode || "overview") >= 0
                 Switch {
-                    checked: tileSettings.settings.showRamDetail !== false
-                    onToggled: tileSettings.saveSetting("showRamDetail", checked)
+                    checked: tileSettings.settings.showBar !== false
+                    onToggled: tileSettings.saveSetting("showBar", checked)
+                }
+            }
+
+            SettingsRow {
+                label: "Details"
+                Switch {
+                    checked: tileSettings.settings.showDetails !== false
+                    onToggled: tileSettings.saveSetting("showDetails", checked)
                 }
             }
         }

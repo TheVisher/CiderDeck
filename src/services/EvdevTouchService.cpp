@@ -207,6 +207,10 @@ void EvdevTouchService::onReadReady()
         } else {
             // Read error (ENODEV, EIO, etc.) or unexpected short read — device is gone
             qWarning() << "[EvdevTouchService] Read error (errno:" << errno << ") — scheduling reconnect";
+            // A dead evdev fd remains readable and would continuously retrigger the
+            // notifier until reconnect() closes it.
+            if (notifier_)
+                notifier_->setEnabled(false);
             // Send a release if we had a press in flight
             if (pressed_ && window_) {
                 const QPointF lastPos(
@@ -218,7 +222,8 @@ void EvdevTouchService::onReadReady()
             }
             pressed_ = false;
             touchDown_ = false;
-            reconnectTimer_->start(1000);
+            if (!reconnectTimer_->isActive())
+                reconnectTimer_->start(1000);
             return;
         }
 

@@ -40,11 +40,18 @@ PageData PageData::fromJson(const QJsonObject &obj) {
 DeckConfig::DeckConfig(QObject *parent)
     : QObject(parent) {
     load();
+    bool pageOk = false;
+    const int previewPage = qEnvironmentVariableIntValue("CIDERDECK_PREVIEW_PAGE", &pageOk);
+    if (pageOk)
+        currentPage_ = qBound(0, previewPage, pages_.size() - 1);
 }
 
 QString DeckConfig::configPath() const {
-    const QString dir = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation)
-                        + QStringLiteral("/ciderdeck");
+    const QString overrideDir = qEnvironmentVariable("CIDERDECK_CONFIG_DIR");
+    const QString dir = overrideDir.isEmpty()
+        ? QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation)
+              + QStringLiteral("/ciderdeck")
+        : overrideDir;
     QDir().mkpath(dir);
     return dir + QStringLiteral("/config.json");
 }
@@ -183,6 +190,15 @@ void DeckConfig::removePage(int index) {
     emit pagesChanged();
     emit tilesChanged();
     save();
+}
+
+QStringList DeckConfig::pageNames() const {
+    QStringList names;
+    names.reserve(pages_.size());
+    for (const auto &page : pages_) {
+        names.append(page.name);
+    }
+    return names;
 }
 
 QVariantList DeckConfig::tilesForPage(int page) const {

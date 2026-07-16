@@ -95,7 +95,7 @@ Item {
         ShaderEffectSource {
             id: blurSource
             anchors.fill: parent
-            sourceItem: dashboard
+            sourceItem: pagePager
             live: false
             visible: false
         }

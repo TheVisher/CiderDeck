@@ -12,9 +12,15 @@ Card {
     readonly property string artFadeMode: settings.artFadeMode || "bottom"
     readonly property real artPeakOpacity: settings.artPeakOpacity !== undefined ? settings.artPeakOpacity : 0.5
     readonly property real artFadePosition: settings.artFadePosition !== undefined ? settings.artFadePosition : 0.0
+    readonly property bool showBackgroundArt: settings.showBackgroundArt !== false
 
     // Info layout settings
     readonly property string infoLayout: settings.infoLayout || "left"
+    readonly property bool showCoverThumbnail: settings.showCoverThumbnail !== false
+    readonly property string textHorizontalPosition: settings.textHorizontalPosition
+        || ((infoLayout === "top" || infoLayout === "bottom" || infoLayout === "center"
+             || infoLayout === "text-only") ? "center" : "left")
+    readonly property string textVerticalPosition: settings.textVerticalPosition || "center"
     readonly property int artSizeSetting: settings.artSize || 0
     readonly property real effectiveArtSize: artSizeSetting > 0 ? artSizeSetting
         : (sizeClass === "large" ? 80 : 56)
@@ -43,6 +49,7 @@ Card {
     readonly property real skipSize: 28 * buttonScale
     readonly property real extraSize: 24 * buttonScale
     readonly property real transportSpacing: 20 * buttonScale
+    readonly property string controlsAlignment: settings.controlsAlignment || "center"
 
     // Player switcher
     readonly property bool showPlayerSwitcher: settings.showPlayerSwitcher !== false
@@ -97,7 +104,8 @@ Card {
     Item {
         id: bgArtContainer
         anchors.fill: parent
-        visible: bgArt.status === Image.Ready && mediaTile.sizeClass !== "tiny" && mediaTile.hasPlayer
+        visible: mediaTile.showBackgroundArt && bgArt.status === Image.Ready
+                 && mediaTile.sizeClass !== "tiny" && mediaTile.hasPlayer
         layer.enabled: visible
         layer.effect: OpacityMask {
             maskSource: Item {
@@ -158,6 +166,7 @@ Card {
     Rectangle {
         anchors.fill: parent
         visible: bgArt.status !== Image.Ready && mediaTile.sizeClass !== "tiny" && mediaTile.hasPlayer
+        opacity: mediaTile.surfaceOpacity
         gradient: Gradient {
             GradientStop { position: 0.0; color: Qt.rgba(themeManager.accentColor.r,
                                                           themeManager.accentColor.g,
@@ -313,12 +322,14 @@ Card {
             anchors.bottomMargin: progressSection.visible ? 8 : 0
             clip: true
 
-            readonly property bool artVisible: mediaTile.infoLayout !== "text-only"
+            readonly property bool artVisible: mediaTile.showCoverThumbnail
+                && mediaTile.infoLayout !== "text-only"
             readonly property bool textVisible: mediaTile.infoLayout !== "art-only"
             readonly property bool isStacked: mediaTile.infoLayout === "top"
                 || mediaTile.infoLayout === "bottom" || mediaTile.infoLayout === "center"
-            readonly property int textAlign: isStacked || mediaTile.infoLayout === "text-only"
-                ? Text.AlignHCenter : Text.AlignLeft
+            readonly property int textAlign: mediaTile.textHorizontalPosition === "right"
+                ? Text.AlignRight
+                : (mediaTile.textHorizontalPosition === "center" ? Text.AlignHCenter : Text.AlignLeft)
 
             // Vertical centering for stacked layouts
             readonly property real stackedBlockH:
@@ -326,6 +337,11 @@ Card {
                 + (artVisible && textVisible ? 8 : 0)
                 + (textVisible ? textCol.implicitHeight : 0)
             readonly property real stackedBlockY: Math.max(0, (height - stackedBlockH) / 2)
+            readonly property real textAreaTop: artVisible
+                && (mediaTile.infoLayout === "top" || mediaTile.infoLayout === "center")
+                ? artBox.y + artBox.height + 8 : 0
+            readonly property real textAreaBottom: artVisible && mediaTile.infoLayout === "bottom"
+                ? artBox.y - 8 : height
 
             Item {
                 id: artBox
@@ -412,6 +428,15 @@ Card {
                     }
                 }
                 y: {
+                    var availableTop = infoSection.textAreaTop
+                    var availableHeight = Math.max(0, infoSection.textAreaBottom - availableTop)
+                    if (mediaTile.textVerticalPosition === "top")
+                        return availableTop
+                    if (mediaTile.textVerticalPosition === "bottom")
+                        return Math.max(availableTop, infoSection.textAreaBottom - implicitHeight)
+                    if (mediaTile.textVerticalPosition === "center")
+                        return availableTop + Math.max(0, (availableHeight - implicitHeight) / 2)
+
                     switch (mediaTile.infoLayout) {
                         case "left":
                         case "right":
@@ -600,7 +625,9 @@ Card {
             id: transportRow
             anchors.bottom: playerIndicator.top
             anchors.bottomMargin: playerIndicator.visible ? 4 : 0
-            anchors.horizontalCenter: parent.horizontalCenter
+            x: mediaTile.controlsAlignment === "left" ? 0
+               : mediaTile.controlsAlignment === "right" ? parent.width - width
+               : (parent.width - width) / 2
             spacing: mediaTile.transportSpacing
 
             // Left extra: shuffle (Spotify) or rewind/seek-back (browser)

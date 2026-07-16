@@ -14,6 +14,7 @@ class KWinDBusClient : public QObject {
 
 public:
     explicit KWinDBusClient(QObject *parent = nullptr);
+    ~KWinDBusClient() override;
 
     bool publishService();
     bool sendCommand(const QString &method, const QVariantList &arguments = {});
@@ -39,7 +40,11 @@ signals:
     void bridgeError(const QString &message);
 
 private:
+    bool startWindowMonitor();
+    void stopWindowMonitor();
+
     bool servicePublished_ = false;
+    bool monitorLoaded_ = false;
     QJsonArray windows_;
 };
 

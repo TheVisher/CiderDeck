@@ -23,8 +23,13 @@ Item {
     property real cellHeight
 
     // Computed position and size
-    x: gridPadding + colValue * (cellWidth + gridGap)
-    y: gridPadding + rowValue * (cellHeight + gridGap)
+    x: editController.dragging && editController.dragTileId === tileIdValue
+       ? editController.dragVisualX
+       : gridPadding + colValue * (cellWidth + gridGap)
+    y: editController.dragging && editController.dragTileId === tileIdValue
+       ? editController.dragVisualY
+       : gridPadding + rowValue * (cellHeight + gridGap)
+    z: editController.dragging && editController.dragTileId === tileIdValue ? 110 : 0
     width: cellWidth * colSpanValue + gridGap * (colSpanValue - 1)
     height: cellHeight * rowSpanValue + gridGap * (rowSpanValue - 1)
 

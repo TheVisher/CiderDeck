@@ -9,6 +9,8 @@ Item {
     property int rowValue: 0
     property int colSpanValue: 1
     property int rowSpanValue: 1
+    property real grabOffsetX: 0
+    property real grabOffsetY: 0
 
     visible: editMode
 
@@ -115,17 +117,19 @@ Item {
         enabled: overlay.editMode
 
         onPressed: (mouse) => {
-            let globalPos = dragArea.mapToItem(null, mouse.x, mouse.y)
+            let pointerPos = dragArea.mapToItem(root, mouse.x, mouse.y)
+            let tilePos = overlay.mapToItem(root, 0, 0)
+            overlay.grabOffsetX = pointerPos.x - tilePos.x
+            overlay.grabOffsetY = pointerPos.y - tilePos.y
             editController.beginDrag(overlay.tileId, overlay.colValue, overlay.rowValue,
                                       overlay.colSpanValue, overlay.rowSpanValue,
-                                      globalPos.x, globalPos.y,
-                                      root.cellWidth, root.cellHeight,
-                                      root.gridGap, root.gridPadding)
+                                      tilePos.x, tilePos.y)
         }
 
         onPositionChanged: (mouse) => {
-            let globalPos = dragArea.mapToItem(null, mouse.x, mouse.y)
-            editController.updateDrag(globalPos.x, globalPos.y,
+            let pointerPos = dragArea.mapToItem(root, mouse.x, mouse.y)
+            editController.updateDrag(pointerPos.x - overlay.grabOffsetX,
+                                       pointerPos.y - overlay.grabOffsetY,
                                        root.cellWidth, root.cellHeight,
                                        root.gridGap, root.gridPadding)
         }

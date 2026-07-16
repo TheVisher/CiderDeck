@@ -69,8 +69,11 @@ AudioMixerService::AudioMixerService(AudioManager *audioManager, QObject *parent
 
 QString AudioMixerService::configPath() const
 {
-    const QString dir = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation)
-                        + QStringLiteral("/ciderdeck");
+    const QString overrideDir = qEnvironmentVariable("CIDERDECK_CONFIG_DIR");
+    const QString dir = overrideDir.isEmpty()
+        ? QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation)
+              + QStringLiteral("/ciderdeck")
+        : overrideDir;
     QDir().mkpath(dir);
     return dir + QStringLiteral("/mixer.json");
 }

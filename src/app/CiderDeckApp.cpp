@@ -73,6 +73,7 @@ int CiderDeckApp::run(QApplication &app) {
     timerService_ = new TimerService(this);
     kwinClient_ = new KWinDBusClient(this);
     kwinClient_->publishService();
+    processManager_->setKWinClient(kwinClient_);
     appLaunchManager_->setKWinClient(kwinClient_);
 
     // ViewModels

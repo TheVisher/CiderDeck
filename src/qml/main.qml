@@ -10,6 +10,12 @@ Window {
 
     title: "CiderDeck"
 
+    Rectangle {
+        anchors.fill: parent
+        color: Qt.rgba(0.025, 0.035, 0.05, 0.68)
+        z: -2
+    }
+
     // Grid math helpers — use actual window size (set by layer-shell or C++)
     readonly property int gridColumns: deckConfig.gridColumns
     readonly property int gridRows: deckConfig.gridRows
@@ -155,9 +161,9 @@ Window {
         }
     }
 
-    // Dashboard page
-    DashboardPage {
-        id: dashboard
+    // Interactive horizontal page track
+    PagePager {
+        id: pagePager
         anchors.fill: parent
 
         gridColumns: root.gridColumns
@@ -190,6 +196,10 @@ Window {
         anchors.right: parent.right
         pageCount: deckConfig.pageCount
         currentPage: deckConfig.currentPage
+        onPageRequested: (index) => pagePager.goToPage(index)
+        onSwipeStarted: pagePager.beginSwipe()
+        onSwipeUpdated: (deltaX) => pagePager.updateSwipe(deltaX)
+        onSwipeFinished: (deltaX, velocityX) => pagePager.endSwipe(deltaX, velocityX)
         z: 50
     }
 

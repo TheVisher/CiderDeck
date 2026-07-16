@@ -3,40 +3,42 @@ import QtQuick
 Item {
     id: page
 
+    required property int pageIndex
     required property int gridColumns
     required property int gridRows
     required property int gridGap
     required property int gridPadding
     required property real cellWidth
     required property real cellHeight
+    property int tileRevision: 0
+    readonly property var pageTiles: {
+        tileRevision
+        return deckConfig.tilesForPage(pageIndex)
+    }
+
+    Connections {
+        target: deckConfig
+        function onTilesChanged() { page.tileRevision++ }
+        function onConfigLoaded() { page.tileRevision++ }
+    }
 
     Repeater {
-        model: tileGridModel
+        model: page.pageTiles
 
         delegate: TileLoader {
-            required property string tileId
-            required property string tileType
-            required property int col
-            required property int row
-            required property int colSpan
-            required property int rowSpan
-            required property string label
-            required property bool showLabel
-            required property real tileOpacity
-            required property real tileBlurLevel
-            required property var tileSettings
+            required property var modelData
 
-            tileIdValue: tileId
-            tileTypeValue: tileType
-            colValue: col
-            rowValue: row
-            colSpanValue: colSpan
-            rowSpanValue: rowSpan
-            labelValue: label
-            showLabelValue: showLabel
-            tileOpacityValue: tileOpacity
-            tileBlurLevelValue: tileBlurLevel
-            tileSettingsValue: tileSettings
+            tileIdValue: modelData.id || ""
+            tileTypeValue: modelData.type || ""
+            colValue: modelData.col || 0
+            rowValue: modelData.row || 0
+            colSpanValue: modelData.colSpan || 1
+            rowSpanValue: modelData.rowSpan || 1
+            labelValue: modelData.label || ""
+            showLabelValue: modelData.showLabel !== false
+            tileOpacityValue: modelData.opacity !== undefined ? modelData.opacity : -1
+            tileBlurLevelValue: modelData.blurLevel !== undefined ? modelData.blurLevel : -1
+            tileSettingsValue: modelData.settings || ({})
 
             gridGap: page.gridGap
             gridPadding: page.gridPadding

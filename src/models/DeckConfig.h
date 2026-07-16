@@ -4,6 +4,7 @@
 #include <QVariantList>
 #include <QVariantMap>
 #include <QList>
+#include <QStringList>
 
 #include "TileData.h"
 
@@ -94,6 +95,7 @@ public:
     Q_INVOKABLE void addPage(const QString &name = QString());
     Q_INVOKABLE void removePage(int index);
 
+    Q_INVOKABLE QStringList pageNames() const;
     Q_INVOKABLE QVariantList tilesForPage(int page) const;
     Q_INVOKABLE void addTile(int page, const QVariantMap &tileMap);
     Q_INVOKABLE void removeTile(const QString &tileId);

@@ -11,7 +11,10 @@ class TileGridModel;
 class EditModeController : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool editing READ editing NOTIFY editingChanged)
+    Q_PROPERTY(bool dragging READ dragging NOTIFY dragStateChanged)
     Q_PROPERTY(QString dragTileId READ dragTileId NOTIFY dragStateChanged)
+    Q_PROPERTY(qreal dragVisualX READ dragVisualX NOTIFY dragStateChanged)
+    Q_PROPERTY(qreal dragVisualY READ dragVisualY NOTIFY dragStateChanged)
     Q_PROPERTY(int ghostCol READ ghostCol NOTIFY dragStateChanged)
     Q_PROPERTY(int ghostRow READ ghostRow NOTIFY dragStateChanged)
     Q_PROPERTY(int ghostColSpan READ ghostColSpan NOTIFY dragStateChanged)
@@ -22,7 +25,10 @@ public:
     explicit EditModeController(DeckConfig *config, TileGridModel *gridModel, QObject *parent = nullptr);
 
     bool editing() const { return editing_; }
+    bool dragging() const { return dragging_; }
     QString dragTileId() const { return dragTileId_; }
+    qreal dragVisualX() const { return dragVisualX_; }
+    qreal dragVisualY() const { return dragVisualY_; }
     int ghostCol() const { return ghostCol_; }
     int ghostRow() const { return ghostRow_; }
     int ghostColSpan() const { return ghostColSpan_; }
@@ -34,7 +40,8 @@ public:
     Q_INVOKABLE void toggleEditMode();
 
     // Drag operations
-    Q_INVOKABLE void beginDrag(const QString &tileId, int col, int row, int colSpan, int rowSpan);
+    Q_INVOKABLE void beginDrag(const QString &tileId, int col, int row, int colSpan, int rowSpan,
+                               qreal pixelX, qreal pixelY);
     Q_INVOKABLE void updateDrag(qreal pixelX, qreal pixelY, qreal cellWidth, qreal cellHeight,
                                  int gridGap, int gridPadding);
     Q_INVOKABLE void endDrag();
@@ -76,6 +83,8 @@ private:
     int ghostRow_ = 0;
     int ghostColSpan_ = 1;
     int ghostRowSpan_ = 1;
+    qreal dragVisualX_ = 0;
+    qreal dragVisualY_ = 0;
     bool ghostValid_ = true;
 
     // Undo state

@@ -2,15 +2,20 @@
 
 #include <QObject>
 #include <QAbstractListModel>
+#include <QJsonArray>
+#include <QSet>
 #include <QTimer>
 
 namespace ciderdeck {
+
+class KWinDBusClient;
 
 struct ProcessInfo {
     int pid = 0;
     QString name;
     double cpuPercent = 0.0;
     long long memKb = 0;
+    bool unresponsive = false;
 };
 
 class ProcessManagerService : public QAbstractListModel {
@@ -23,6 +28,7 @@ public:
         NameRole,
         CpuPercentRole,
         MemoryRole,
+        UnresponsiveRole,
     };
 
     explicit ProcessManagerService(QObject *parent = nullptr);
@@ -35,15 +41,18 @@ public:
 
     Q_INVOKABLE void killProcess(int pid);
     Q_INVOKABLE void refresh();
+    void setKWinClient(KWinDBusClient *client);
 
 signals:
     void processListChanged();
 
 private:
     void poll();
+    void updateWindowStates(const QJsonArray &windows);
 
     QTimer *timer_ = nullptr;
     QList<ProcessInfo> processes_;
+    QSet<int> unresponsivePids_;
 };
 
 } // namespace ciderdeck

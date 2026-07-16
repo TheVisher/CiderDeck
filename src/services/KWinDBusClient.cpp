@@ -8,6 +8,7 @@
 #include <QDir>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QCoreApplication>
 #include <QTemporaryFile>
 #include <QUuid>
 #include <QTextStream>
@@ -47,6 +48,10 @@ function ciderdeckDebug(msg) {
 KWinDBusClient::KWinDBusClient(QObject *parent)
     : QObject(parent) {}
 
+KWinDBusClient::~KWinDBusClient() {
+    stopWindowMonitor();
+}
+
 bool KWinDBusClient::publishService() {
     if (servicePublished_) return true;
 
@@ -64,7 +69,64 @@ bool KWinDBusClient::publishService() {
 
     servicePublished_ = true;
     qInfo() << "[KWinDBusClient] DBus bridge ready: org.ciderdeck.App /CiderDeck";
+    startWindowMonitor();
     return true;
+}
+
+bool KWinDBusClient::startWindowMonitor() {
+    QString scriptPath = qEnvironmentVariable("CIDERDECK_KWIN_SCRIPT");
+    if (scriptPath.isEmpty()) {
+        const QString developmentPath = QDir(QCoreApplication::applicationDirPath())
+                                            .absoluteFilePath(QStringLiteral("../kwin-scripts/ciderdeck-bridge.js"));
+        if (QFile::exists(developmentPath))
+            scriptPath = developmentPath;
+    }
+    if (scriptPath.isEmpty()) {
+        const QString installedPath = QStringLiteral("/usr/share/ciderdeck/kwin-scripts/ciderdeck-bridge.js");
+        if (QFile::exists(installedPath))
+            scriptPath = installedPath;
+    }
+    if (scriptPath.isEmpty()) {
+        emit bridgeError(QStringLiteral("KWin monitor script not found"));
+        return false;
+    }
+
+    QDBusInterface scripting(
+        QStringLiteral("org.kde.KWin"),
+        QStringLiteral("/Scripting"),
+        QStringLiteral("org.kde.kwin.Scripting"),
+        QDBusConnection::sessionBus());
+    if (!scripting.isValid())
+        return false;
+
+    const QString pluginName = QStringLiteral("ciderdeck-window-monitor");
+    scripting.call(QStringLiteral("unloadScript"), pluginName);
+    const QDBusReply<int> loadReply = scripting.call(QStringLiteral("loadScript"), scriptPath, pluginName);
+    if (!loadReply.isValid()) {
+        emit bridgeError(QStringLiteral("Failed to load KWin monitor: ") + loadReply.error().message());
+        return false;
+    }
+
+    const QDBusMessage startReply = scripting.call(QStringLiteral("start"));
+    if (startReply.type() == QDBusMessage::ErrorMessage) {
+        emit bridgeError(QStringLiteral("Failed to start KWin monitor: ") + startReply.errorMessage());
+        return false;
+    }
+    monitorLoaded_ = true;
+    return true;
+}
+
+void KWinDBusClient::stopWindowMonitor() {
+    if (!monitorLoaded_)
+        return;
+    QDBusInterface scripting(
+        QStringLiteral("org.kde.KWin"),
+        QStringLiteral("/Scripting"),
+        QStringLiteral("org.kde.kwin.Scripting"),
+        QDBusConnection::sessionBus());
+    if (scripting.isValid())
+        scripting.call(QStringLiteral("unloadScript"), QStringLiteral("ciderdeck-window-monitor"));
+    monitorLoaded_ = false;
 }
 
 bool KWinDBusClient::sendCommand(const QString &method, const QVariantList &arguments) {
@@ -84,6 +146,7 @@ var windows = workspace.windowList()
             pid: Number(w.pid || 0),
             outputName: String(w.output ? w.output.name : ""),
             minimized: Boolean(w.minimized),
+            unresponsive: Boolean(w.unresponsive),
             active: Boolean(activeWin && String(w.internalId) === String(activeWin.internalId))
         };
     });

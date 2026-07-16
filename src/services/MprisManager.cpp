@@ -5,12 +5,46 @@
 #include <QDBusReply>
 #include <QDBusMessage>
 #include <QDebug>
+#include <QUrl>
+#include <QUrlQuery>
 
 namespace ciderdeck {
 
 static const QString kMprisPrefix = QStringLiteral("org.mpris.MediaPlayer2.");
 static const QString kPlayerInterface = QStringLiteral("org.mpris.MediaPlayer2.Player");
 static const QString kPropertiesInterface = QStringLiteral("org.freedesktop.DBus.Properties");
+
+static QString youtubeArtworkUrl(const QString &mediaUrl) {
+    const QUrl url(mediaUrl);
+    const QString host = url.host().toLower();
+    QString videoId;
+
+    if (host == QStringLiteral("youtu.be")) {
+        videoId = url.path().section('/', 1, 1);
+    } else if (host == QStringLiteral("youtube.com")
+               || host.endsWith(QStringLiteral(".youtube.com"))) {
+        videoId = QUrlQuery(url).queryItemValue(QStringLiteral("v"));
+        if (videoId.isEmpty()) {
+            const QString section = url.path().section('/', 1, 1);
+            if (section == QStringLiteral("shorts")
+                || section == QStringLiteral("embed")
+                || section == QStringLiteral("live")) {
+                videoId = url.path().section('/', 2, 2);
+            }
+        }
+    }
+
+    if (videoId.length() < 6 || videoId.length() > 20) {
+        return {};
+    }
+    for (const QChar c : videoId) {
+        if (!c.isLetterOrNumber() && c != u'_' && c != u'-') {
+            return {};
+        }
+    }
+
+    return QStringLiteral("https://i.ytimg.com/vi/%1/hqdefault.jpg").arg(videoId);
+}
 
 MprisManager::MprisManager(QObject *parent)
     : QObject(parent) {
@@ -180,6 +214,9 @@ void MprisManager::fetchMetadata() {
     title_ = metadata.value("xesam:title").toString();
     album_ = metadata.value("xesam:album").toString();
     artUrl_ = metadata.value("mpris:artUrl").toString();
+    if (artUrl_.isEmpty()) {
+        artUrl_ = youtubeArtworkUrl(metadata.value("xesam:url").toString());
+    }
     trackId_ = metadata.value("mpris:trackid").toString();
 
     auto artists = metadata.value("xesam:artist").toStringList();

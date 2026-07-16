@@ -6,6 +6,10 @@ Item {
     property int pageCount: 1
     property int currentPage: 0
     property bool editMode: editController ? editController.editing : false
+    signal pageRequested(int index)
+    signal swipeStarted()
+    signal swipeUpdated(real deltaX)
+    signal swipeFinished(real deltaX, real velocityX)
 
     visible: pageCount > 1
 
@@ -13,38 +17,33 @@ Item {
     implicitWidth: parent ? parent.width : 400
     implicitHeight: 40
 
-    // ─── Swipe detection (disabled in edit mode so resize handles work) ───
+    // Dragging anywhere on this strip directly moves the horizontal page track.
     MouseArea {
         id: swipeArea
         anchors.fill: parent
         enabled: !pageNav.editMode
+        preventStealing: true
 
         property real startX: 0
         property real startTime: 0
-        readonly property real swipeThreshold: 60  // px minimum drag
 
         onPressed: (mouse) => {
             startX = mouse.x
             startTime = Date.now()
+            pageNav.swipeStarted()
         }
-
+        onPositionChanged: (mouse) => {
+            if (pressed)
+                pageNav.swipeUpdated(mouse.x - startX)
+        }
         onReleased: (mouse) => {
-            var dx = mouse.x - startX
-            var dt = Date.now() - startTime
-
-            // Must travel far enough and fast enough (< 800ms)
-            if (Math.abs(dx) >= swipeThreshold && dt < 800) {
-                if (dx < 0 && pageNav.currentPage < pageNav.pageCount - 1) {
-                    // Swipe left → next page
-                    deckConfig.currentPage = pageNav.currentPage + 1
-                } else if (dx > 0 && pageNav.currentPage > 0) {
-                    // Swipe right → previous page
-                    deckConfig.currentPage = pageNav.currentPage - 1
-                }
-            }
+            var delta = mouse.x - startX
+            var elapsed = Math.max(1, Date.now() - startTime)
+            pageNav.swipeFinished(delta, delta * 1000 / elapsed)
         }
-
-        // Tap on empty space does nothing (swipe only)
+        onCanceled: {
+            pageNav.swipeFinished(0, 0)
+        }
     }
 
     // ─── Left arrow ───
@@ -73,7 +72,7 @@ Item {
             anchors.margins: -4
             hoverEnabled: true
             enabled: pageNav.currentPage > 0
-            onClicked: deckConfig.currentPage = pageNav.currentPage - 1
+            onClicked: pageNav.pageRequested(pageNav.currentPage - 1)
         }
     }
 
@@ -103,7 +102,7 @@ Item {
             anchors.margins: -4
             hoverEnabled: true
             enabled: pageNav.currentPage < pageNav.pageCount - 1
-            onClicked: deckConfig.currentPage = pageNav.currentPage + 1
+            onClicked: pageNav.pageRequested(pageNav.currentPage + 1)
         }
     }
 
@@ -133,7 +132,7 @@ Item {
                 MouseArea {
                     anchors.fill: parent
                     anchors.margins: -6  // bigger hit target
-                    onClicked: deckConfig.currentPage = index
+                    onClicked: pageNav.pageRequested(index)
                 }
             }
         }
