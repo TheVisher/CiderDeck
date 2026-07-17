@@ -1,6 +1,6 @@
 # Maintainer: TheVisher
 pkgname=ciderdeck
-pkgver=0.1.0.r31.369c400
+pkgver=0.1.0.r33.d9985a9
 pkgrel=1
 pkgdesc='Touch-optimized dashboard for Corsair Xeneon Edge'
 arch=('x86_64')
