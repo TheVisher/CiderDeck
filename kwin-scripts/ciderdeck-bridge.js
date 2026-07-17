@@ -43,9 +43,11 @@ workspace.windowRemoved.connect(function() {
     pushWindowList();
 });
 
-workspace.activeWindowChanged.connect(function() {
-    pushWindowList();
-});
+if (workspace.activeWindowChanged) {
+    workspace.activeWindowChanged.connect(function() {
+        pushWindowList();
+    });
+}
 
 workspace.windowList().forEach(watchWindow);
 

@@ -14,6 +14,8 @@ configuration remain unchanged while the preview is evaluated.
 - Smooth horizontal page transitions with full-screen and edge swipe navigation
 - Configurable CPU, GPU, memory, storage, network, and overview monitoring tiles
 - Compact process monitoring with KWin-backed unresponsive-window indicators
+- Asynchronous official repository, AUR, and Flatpak update monitoring with an
+  interactive Konsole update action
 - Existing clock, edit mode, app picker, settings, and tile movement retained
 - Existing per-tile opacity and slider customization retained
 

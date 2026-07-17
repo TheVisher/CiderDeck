@@ -36,6 +36,7 @@
 #include "services/WeatherService.h"
 #include "services/SystemMonitorService.h"
 #include "services/ProcessManagerService.h"
+#include "services/UpdateService.h"
 #include "services/ScreenshotService.h"
 #include "services/BrightnessService.h"
 #include "services/ClipboardService.h"
@@ -67,6 +68,7 @@ int CiderDeckApp::run(QApplication &app) {
     weatherService_ = new WeatherService(this);
     systemMonitor_ = new SystemMonitorService(this);
     processManager_ = new ProcessManagerService(this);
+    updateService_ = new UpdateService(this);
     screenshotService_ = new ScreenshotService(this);
     brightnessService_ = new BrightnessService(this);
     clipboardService_ = new ClipboardService(this);
@@ -126,6 +128,7 @@ int CiderDeckApp::run(QApplication &app) {
     ctx->setContextProperty("weatherService", weatherService_);
     ctx->setContextProperty("systemMonitor", systemMonitor_);
     ctx->setContextProperty("processManager", processManager_);
+    ctx->setContextProperty("updateService", updateService_);
     ctx->setContextProperty("screenshotService", screenshotService_);
     ctx->setContextProperty("brightnessService", brightnessService_);
     ctx->setContextProperty("clipboardService", clipboardService_);

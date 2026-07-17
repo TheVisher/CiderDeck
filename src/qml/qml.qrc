@@ -20,6 +20,7 @@
         <file>SystemMonitorTile.qml</file>
         <file>MetricSparkline.qml</file>
         <file>ProcessManagerTile.qml</file>
+        <file>UpdatesTile.qml</file>
         <file>ScreenshotTile.qml</file>
         <file>BrightnessTile.qml</file>
         <file>ClipboardHistoryTile.qml</file>

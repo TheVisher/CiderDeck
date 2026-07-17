@@ -64,6 +64,8 @@ add_executable(ciderdeck
   src/services/SystemMonitorService.cpp
   src/services/ProcessManagerService.h
   src/services/ProcessManagerService.cpp
+  src/services/UpdateService.h
+  src/services/UpdateService.cpp
   src/services/ScreenshotService.h
   src/services/ScreenshotService.cpp
   src/services/BrightnessService.h

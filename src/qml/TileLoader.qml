@@ -80,6 +80,7 @@ Item {
             case "weather":         return weatherComponent
             case "system_monitor":  return systemMonitorComponent
             case "process_manager": return processManagerComponent
+            case "updates":         return updatesComponent
             case "screenshot":      return screenshotComponent
             case "brightness":      return brightnessComponent
             case "clipboard":       return clipboardComponent
@@ -137,6 +138,7 @@ Item {
     Component { id: weatherComponent;        WeatherTile {} }
     Component { id: systemMonitorComponent;  SystemMonitorTile {} }
     Component { id: processManagerComponent; ProcessManagerTile {} }
+    Component { id: updatesComponent;        UpdatesTile {} }
     Component { id: screenshotComponent;     ScreenshotTile {} }
     Component { id: brightnessComponent;     BrightnessTile {} }
     Component { id: clipboardComponent;      ClipboardHistoryTile {} }

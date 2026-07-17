@@ -169,6 +169,8 @@ void EditModeController::addTile(const QString &typeStr) {
         colSpan = 8; rowSpan = 2; break;
     case TileType::ProcessManager:
         colSpan = 8; rowSpan = 6; break;
+    case TileType::Updates:
+        colSpan = 8; rowSpan = 4; break;
     default:
         colSpan = 4; rowSpan = 4; break;
     }

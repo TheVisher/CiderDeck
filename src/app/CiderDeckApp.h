@@ -19,6 +19,7 @@ class MprisManager;
 class WeatherService;
 class SystemMonitorService;
 class ProcessManagerService;
+class UpdateService;
 class ScreenshotService;
 class BrightnessService;
 class ClipboardService;
@@ -58,6 +59,7 @@ private:
     WeatherService *weatherService_ = nullptr;
     SystemMonitorService *systemMonitor_ = nullptr;
     ProcessManagerService *processManager_ = nullptr;
+    UpdateService *updateService_ = nullptr;
     ScreenshotService *screenshotService_ = nullptr;
     BrightnessService *brightnessService_ = nullptr;
     ClipboardService *clipboardService_ = nullptr;

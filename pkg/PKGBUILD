@@ -27,6 +27,10 @@ makedepends=(
 )
 optdepends=(
   'ddcutil: monitor brightness via DDC/CI'
+  'pacman-contrib: official repository update checks'
+  'paru: AUR update checks and interactive system updates'
+  'flatpak: Flatpak update checks and interactive updates'
+  'konsole: interactive update terminal'
 )
 source=("${pkgname}::git+file://$(cd "${PWD}/.." && pwd)#branch=ciderdeck-next")
 sha256sums=('SKIP')

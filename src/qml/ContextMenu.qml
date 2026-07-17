@@ -47,6 +47,7 @@ Menu {
         MenuItem { text: "Weather";         onTriggered: editController.addTile("weather") }
         MenuItem { text: "System Monitor";  onTriggered: editController.addTile("system_monitor") }
         MenuItem { text: "Process Manager"; onTriggered: editController.addTile("process_manager") }
+        MenuItem { text: "Updates";         onTriggered: editController.addTile("updates") }
         MenuItem { text: "Screenshot";      onTriggered: editController.addTile("screenshot") }
         MenuItem { text: "Brightness";      onTriggered: editController.addTile("brightness") }
         MenuItem { text: "Clipboard";       onTriggered: editController.addTile("clipboard") }
