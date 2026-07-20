@@ -18,15 +18,110 @@ Flickable {
     }
     property string tileType: tileData.type || ""
     property var settings: tileData.settings || ({})
+    readonly property bool supportsCustomLabel: [
+        "app_launcher", "command_button", "overview", "show_desktop", "screenshot"
+    ].indexOf(tileType) >= 0
 
     // Audio mixer: which group index the app picker is targeting
     property int mixerAppPickerGroupIdx: -1
 
+    readonly property var weatherElements: [
+        { id: "header", label: "Header" },
+        { id: "location", label: "Location" },
+        { id: "weatherIcon", label: "Icon" },
+        { id: "temperature", label: "Temperature" },
+        { id: "condition", label: "Condition" },
+        { id: "wind", label: "Wind" },
+        { id: "humidity", label: "Humidity" }
+    ]
+
+    readonly property var contentElements: {
+        switch (tileType) {
+        case "clock_date": {
+            var clockElements = [{ id: "time", label: "Time", hasText: true }]
+            // Modern and Flip treat seconds as part of the Time block so
+            // enabling them automatically uses the same position and size.
+            if ((settings.clockStyle || "classic") === "classic")
+                clockElements.push({ id: "seconds", label: "Seconds", hasText: true })
+            clockElements.push(
+                { id: "period", label: "AM / PM", hasText: true },
+                { id: "date", label: "Date", hasText: true },
+                { id: "day", label: "Day (Modern)", hasText: true })
+            return clockElements
+        }
+        case "app_launcher": return [
+            { id: "icon", label: "Icon", hasText: false },
+            { id: "label", label: "Label", hasText: true },
+            { id: "status", label: "Running indicator", hasText: false }
+        ]
+        case "command_button": return [
+            { id: "icon", label: "Icon", hasText: false },
+            { id: "label", label: "Label", hasText: true }
+        ]
+        case "overview": return [
+            { id: "icon", label: "Icon", hasText: false },
+            { id: "label", label: "Label", hasText: true }
+        ]
+        case "screenshot": return [
+            { id: "icon", label: "Icon", hasText: false },
+            { id: "label", label: "Label", hasText: true },
+            { id: "shortcut", label: "Shortcut", hasText: true }
+        ]
+        case "show_desktop": return [
+            { id: "icon", label: "Icon", hasText: false },
+            { id: "label", label: "Label", hasText: true }
+        ]
+        case "timer_stopwatch": return [
+            { id: "time", label: "Time", hasText: true },
+            { id: "controls", label: "Controls", hasText: false },
+            { id: "mode", label: "Mode buttons", hasText: true }
+        ]
+        case "clipboard": return [
+            { id: "header", label: "Header", hasText: true },
+            { id: "history", label: "History", hasText: true,
+              sizeLabel: "Thumbnail / spacing" },
+            { id: "clear", label: "Clear button", hasText: false },
+            { id: "empty", label: "Empty message", hasText: true }
+        ]
+        case "media_player": return [
+            { id: "artwork", label: "Artwork", hasText: false },
+            { id: "trackInfo", label: "Track info", hasText: true },
+            { id: "progress", label: "Progress", hasText: true,
+              sizeLabel: "Bar / label size" },
+            { id: "controls", label: "Playback controls", hasText: false },
+            { id: "player", label: "Player indicator", hasText: true }
+        ]
+        case "process_manager": return [
+            { id: "header", label: "Header", hasText: true },
+            { id: "processes", label: "Process list", hasText: true }
+        ]
+        case "brightness":
+        case "audio_mixer": return [
+            { id: "header", label: "Header", hasText: true },
+            { id: "icon", label: "Icon", hasText: false },
+            { id: "rail", label: "Slider", hasText: false, sizeLabel: "Slider length" },
+            { id: "value", label: "Value", hasText: true },
+            { id: "detail", label: "Detail", hasText: true }
+        ]
+        default: return []
+        }
+    }
+    readonly property bool supportsGenericContentEditor: contentElements.length > 0
+
     ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+    // Tile content can also be changed by the tile itself (for example, when a
+    // Weather element is dragged). Always merge settings edits into the newest
+    // model value instead of the panel's last rendered snapshot.
+    function latestSettings() {
+        _refreshCounter // re-evaluate bindings after any tile model reset
+        var latestTile = tileId ? tileGridModel.getTileById(tileId) : ({})
+        return latestTile.settings || settings || ({})
+    }
 
     function saveSetting(key, value) {
         var changes = {}
-        var newSettings = Object.assign({}, settings)
+        var newSettings = Object.assign({}, latestSettings())
         newSettings[key] = value
         changes["settings"] = newSettings
         deckConfig.updateTile(tileId, changes)
@@ -38,6 +133,115 @@ Flickable {
         changes[key] = value
         deckConfig.updateTile(tileId, changes)
         _refreshCounter++
+    }
+
+    function weatherElementValue(elementId, key, fallback) {
+        var layout = latestSettings().weatherLayout || ({})
+        var element = layout[elementId] || ({})
+        return element[key] !== undefined ? Number(element[key]) : fallback
+    }
+
+    function weatherElementVisible(elementId) {
+        var currentSettings = latestSettings()
+        var layout = currentSettings.weatherLayout || ({})
+        var element = layout[elementId] || ({})
+        if (element.visible !== undefined) return Boolean(element.visible)
+        if (elementId === "weatherIcon") return currentSettings.showIcon !== false
+        if (elementId === "condition") return currentSettings.showCondition !== false
+        if (elementId === "wind" || elementId === "humidity")
+            return currentSettings.showWind !== false
+        if (elementId === "location") return currentSettings.showLocation !== false
+        return true
+    }
+
+    function saveWeatherElementValue(elementId, key, requested) {
+        var accepted = requested
+        if (root.contentItemValueValidator)
+            accepted = root.contentItemValueValidator(elementId, key, requested)
+        var layout = JSON.parse(JSON.stringify(latestSettings().weatherLayout || ({})))
+        var element = Object.assign({}, layout[elementId] || ({}))
+        element[key] = Math.round(accepted * 100) / 100
+        layout[elementId] = element
+        saveSetting("weatherLayout", layout)
+        return accepted
+    }
+
+    function resetWeatherElement(elementId) {
+        var layout = JSON.parse(JSON.stringify(latestSettings().weatherLayout || ({})))
+        delete layout[elementId]
+        saveSetting("weatherLayout", layout)
+    }
+
+    function saveWeatherElementVisible(elementId, visible) {
+        var layout = JSON.parse(JSON.stringify(latestSettings().weatherLayout || ({})))
+        var element = Object.assign({}, layout[elementId] || ({}))
+        element.visible = visible
+        layout[elementId] = element
+        saveSetting("weatherLayout", layout)
+    }
+
+    function contentElementDescriptor(elementId) {
+        for (var i = 0; i < contentElements.length; ++i) {
+            if (contentElements[i].id === elementId) return contentElements[i]
+        }
+        return { id: elementId, label: elementId, hasText: true }
+    }
+
+    function contentElementValue(elementId, key, fallback) {
+        var layout = latestSettings().contentLayout || ({})
+        var element = layout[elementId] || ({})
+        return element[key] !== undefined ? Number(element[key]) : fallback
+    }
+
+    function contentElementVisible(elementId) {
+        var layout = latestSettings().contentLayout || ({})
+        var element = layout[elementId] || ({})
+        return element.visible !== false
+    }
+
+    function contentElementHasText(elementId) {
+        return contentElementDescriptor(elementId).hasText !== false
+    }
+
+    function contentElementSizeLabel(elementId) {
+        return contentElementDescriptor(elementId).sizeLabel || "Item size"
+    }
+
+    function contentOverlapAllowed() {
+        return latestSettings().allowContentOverlap === true
+    }
+
+    function saveContentElementValue(elementId, key, requested) {
+        var accepted = requested
+        if (root.contentItemValueValidator)
+            accepted = root.contentItemValueValidator(elementId, key, requested)
+        var layout = JSON.parse(JSON.stringify(latestSettings().contentLayout || ({})))
+        var element = Object.assign({}, layout[elementId] || ({}))
+        element[key] = Math.round(accepted * 100) / 100
+        layout[elementId] = element
+        saveSetting("contentLayout", layout)
+        return accepted
+    }
+
+    function saveContentElementVisible(elementId, visible) {
+        var layout = JSON.parse(JSON.stringify(latestSettings().contentLayout || ({})))
+        var element = Object.assign({}, layout[elementId] || ({}))
+        element.visible = visible
+        layout[elementId] = element
+        saveSetting("contentLayout", layout)
+    }
+
+    function resetContentElement(elementId) {
+        var layout = JSON.parse(JSON.stringify(latestSettings().contentLayout || ({})))
+        delete layout[elementId]
+        saveSetting("contentLayout", layout)
+    }
+
+    Connections {
+        target: tileGridModel
+        function onModelReset() {
+            tileSettings._refreshCounter++
+        }
     }
 
     ColumnLayout {
@@ -56,6 +260,7 @@ Flickable {
         // --- Common settings ---
         SettingsRow {
             label: "Label"
+            visible: tileSettings.supportsCustomLabel
             TextField {
                 text: tileSettings.tileData.label || ""
                 placeholderText: "Tile label"
@@ -72,6 +277,7 @@ Flickable {
 
         SettingsRow {
             label: "Show label"
+            visible: tileSettings.supportsCustomLabel
             Switch {
                 checked: tileSettings.tileData.showLabel !== false
                 onToggled: tileSettings.saveProperty("showLabel", checked)
@@ -130,10 +336,17 @@ Flickable {
                 spacing: 8
                 Slider {
                     id: contentScaleSlider
-                    from: 0.5; to: 5.0; stepSize: 0.05
+                    from: 0.5; to: 3.0; stepSize: 0.05
                     value: tileSettings.settings.contentScale !== undefined && tileSettings.settings.contentScale > 0
                            ? tileSettings.settings.contentScale : deckConfig.globalTextScale
-                    onMoved: tileSettings.saveSetting("contentScale", Math.round(value * 100) / 100)
+                    onMoved: {
+                        var requested = Math.round(value * 100) / 100
+                        var accepted = requested
+                        if (root.contentScaleValidator)
+                            accepted = root.contentScaleValidator(requested)
+                        value = accepted
+                        tileSettings.saveSetting("contentScale", Math.round(accepted * 100) / 100)
+                    }
                     implicitWidth: 120
                 }
                 Text {
@@ -161,6 +374,22 @@ Flickable {
                     }
                 }
             }
+        }
+
+        Text {
+            Layout.fillWidth: true
+            text: "Scales the tile's text and primary controls. Growth stops before content would clip."
+            color: themeManager.secondaryTextColor
+            font.pixelSize: 11 * tileSettings.ts
+            wrapMode: Text.WordWrap
+        }
+
+        ContentEditorSettings {
+            visible: tileSettings.supportsGenericContentEditor
+            settingsHost: tileSettings
+            editorName: tileSettings.tileType.replace("_", " ").replace(/\b\w/g, function(c) {
+                return c.toUpperCase()
+            })
         }
 
         Rectangle { Layout.fillWidth: true; height: 1; color: themeManager.borderColor }
@@ -1206,6 +1435,25 @@ Flickable {
             }
 
             SettingsRow {
+                label: "Timestamp format"
+                RowLayout {
+                    spacing: 6
+                    Button {
+                        text: "Standard (12-hour)"
+                        flat: true
+                        highlighted: (tileSettings.settings.timestampFormat || "12h") === "12h"
+                        onClicked: tileSettings.saveSetting("timestampFormat", "12h")
+                    }
+                    Button {
+                        text: "Military (24-hour)"
+                        flat: true
+                        highlighted: tileSettings.settings.timestampFormat === "24h"
+                        onClicked: tileSettings.saveSetting("timestampFormat", "24h")
+                    }
+                }
+            }
+
+            SettingsRow {
                 label: "Show scrollbar"
                 Switch {
                     checked: tileSettings.settings.showScrollbar !== false
@@ -1219,7 +1467,7 @@ Flickable {
                     spacing: 8
                     Slider {
                         id: thumbHeightSlider
-                        from: 30; to: 200; stepSize: 10
+                        from: 30; to: 400; stepSize: 10
                         value: tileSettings.settings.thumbnailHeight || 80
                         onMoved: tileSettings.saveSetting("thumbnailHeight", value)
                         implicitWidth: 120
@@ -1286,6 +1534,132 @@ Flickable {
                 color: themeManager.accentColor
                 font.pixelSize: 15 * tileSettings.ts
                 font.bold: true
+            }
+
+            Button {
+                Layout.fillWidth: true
+                text: root.contentEditTileId === tileSettings.tileId
+                      ? "Done Editing Weather Content" : "Edit Weather Content Layout"
+                onClicked: {
+                    if (root.contentEditTileId === tileSettings.tileId)
+                        root.endContentEdit()
+                    else
+                        root.beginContentEdit(tileSettings.tileId, "temperature")
+                }
+            }
+
+            Text {
+                Layout.fillWidth: true
+                visible: root.contentEditTileId === tileSettings.tileId
+                text: "Drag the outlined items inside the Weather tile. You can drag this settings panel by its title bar if it is in the way."
+                color: themeManager.secondaryTextColor
+                font.pixelSize: 12 * tileSettings.ts
+                wrapMode: Text.WordWrap
+            }
+
+            Text {
+                Layout.fillWidth: true
+                visible: root.contentEditTileId === tileSettings.tileId
+                         && root.contentEditConstraint !== ""
+                text: root.contentEditConstraint
+                color: themeManager.errorColor
+                font.pixelSize: 12 * tileSettings.ts
+                font.weight: Font.DemiBold
+                wrapMode: Text.WordWrap
+            }
+
+            Flow {
+                Layout.fillWidth: true
+                spacing: 5
+                visible: root.contentEditTileId === tileSettings.tileId
+
+                Repeater {
+                    model: tileSettings.weatherElements
+                    Button {
+                        required property var modelData
+                        text: modelData.label
+                              + (tileSettings.weatherElementVisible(modelData.id) ? "" : " (hidden)")
+                        flat: true
+                        highlighted: root.contentEditElement === modelData.id
+                        onClicked: root.contentEditElement = modelData.id
+                    }
+                }
+            }
+
+            SettingsRow {
+                label: "Show item"
+                visible: root.contentEditTileId === tileSettings.tileId
+                Switch {
+                    checked: tileSettings.weatherElementVisible(root.contentEditElement)
+                    onToggled: tileSettings.saveWeatherElementVisible(
+                        root.contentEditElement, checked)
+                }
+            }
+
+            SettingsRow {
+                label: "Item size"
+                visible: root.contentEditTileId === tileSettings.tileId
+                RowLayout {
+                    spacing: 8
+                    Slider {
+                        id: weatherItemScaleSlider
+                        from: 0.5; to: 3.0; stepSize: 0.05
+                        onMoved: value = tileSettings.saveWeatherElementValue(
+                            root.contentEditElement, "scale", Math.round(value * 100) / 100)
+                        implicitWidth: 150
+
+                        Binding on value {
+                            when: !weatherItemScaleSlider.pressed
+                            value: tileSettings.weatherElementValue(
+                                root.contentEditElement, "scale", 1)
+                        }
+                    }
+                    Text {
+                        text: Math.round(weatherItemScaleSlider.value * 100) + "%"
+                        color: themeManager.secondaryTextColor
+                        font.pixelSize: 12 * tileSettings.ts
+                    }
+                }
+            }
+
+            SettingsRow {
+                label: "Text size"
+                visible: root.contentEditTileId === tileSettings.tileId
+                         && root.contentEditElement !== "weatherIcon"
+                RowLayout {
+                    spacing: 8
+                    Slider {
+                        id: weatherTextScaleSlider
+                        from: 0.5; to: 3.0; stepSize: 0.05
+                        onMoved: value = tileSettings.saveWeatherElementValue(
+                            root.contentEditElement, "textScale", Math.round(value * 100) / 100)
+                        implicitWidth: 150
+
+                        Binding on value {
+                            when: !weatherTextScaleSlider.pressed
+                            value: tileSettings.weatherElementValue(
+                                root.contentEditElement, "textScale", 1)
+                        }
+                    }
+                    Text {
+                        text: Math.round(weatherTextScaleSlider.value * 100) + "%"
+                        color: themeManager.secondaryTextColor
+                        font.pixelSize: 12 * tileSettings.ts
+                    }
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                visible: root.contentEditTileId === tileSettings.tileId
+                Button {
+                    text: "Reset Selected"
+                    onClicked: tileSettings.resetWeatherElement(root.contentEditElement)
+                }
+                Button {
+                    text: "Reset Entire Layout"
+                    onClicked: tileSettings.saveSetting("weatherLayout", ({}))
+                }
             }
 
             SettingsRow {
@@ -1361,29 +1735,34 @@ Flickable {
             SettingsRow {
                 label: "Show icon"
                 Switch {
-                    checked: tileSettings.settings.showIcon !== false
-                    onToggled: tileSettings.saveSetting("showIcon", checked)
+                    checked: tileSettings.weatherElementVisible("weatherIcon")
+                    onToggled: tileSettings.saveWeatherElementVisible("weatherIcon", checked)
                 }
             }
             SettingsRow {
                 label: "Show condition"
                 Switch {
-                    checked: tileSettings.settings.showCondition !== false
-                    onToggled: tileSettings.saveSetting("showCondition", checked)
+                    checked: tileSettings.weatherElementVisible("condition")
+                    onToggled: tileSettings.saveWeatherElementVisible("condition", checked)
                 }
             }
             SettingsRow {
                 label: "Show wind/humidity"
                 Switch {
-                    checked: tileSettings.settings.showWind !== false
-                    onToggled: tileSettings.saveSetting("showWind", checked)
+                    checked: tileSettings.weatherElementVisible("wind")
+                             && tileSettings.weatherElementVisible("humidity")
+                    onToggled: {
+                        var desired = checked
+                        tileSettings.saveWeatherElementVisible("wind", desired)
+                        tileSettings.saveWeatherElementVisible("humidity", desired)
+                    }
                 }
             }
             SettingsRow {
                 label: "Show location"
                 Switch {
-                    checked: tileSettings.settings.showLocation !== false
-                    onToggled: tileSettings.saveSetting("showLocation", checked)
+                    checked: tileSettings.weatherElementVisible("location")
+                    onToggled: tileSettings.saveWeatherElementVisible("location", checked)
                 }
             }
         }
@@ -1403,16 +1782,33 @@ Flickable {
 
             SettingsRow {
                 label: "Preferred player"
-                TextField {
-                    text: tileSettings.settings.preferredPlayer || ""
-                    placeholderText: "Auto (most recent)"
-                    onEditingFinished: tileSettings.saveSetting("preferredPlayer", text)
-                    implicitWidth: 180
-                    color: themeManager.textColor
-                    background: Rectangle {
-                        implicitHeight: 28; radius: 6; color: "transparent"
-                        border.width: 1; border.color: themeManager.borderColor
+                ComboBox {
+                    id: preferredPlayerCombo
+                    readonly property string savedPlayer: tileSettings.settings.preferredPlayer || ""
+                    model: {
+                        var result = ["Auto"]
+                        var players = mprisManager.playerNames || []
+                        var savedFound = savedPlayer === ""
+                        for (var i = 0; i < players.length; ++i) {
+                            result.push(players[i])
+                            if (players[i].toLowerCase() === savedPlayer.toLowerCase())
+                                savedFound = true
+                        }
+                        if (!savedFound)
+                            result.push(savedPlayer)
+                        return result
                     }
+                    currentIndex: {
+                        if (savedPlayer === "") return 0
+                        for (var i = 1; i < model.length; ++i) {
+                            if (String(model[i]).toLowerCase() === savedPlayer.toLowerCase())
+                                return i
+                        }
+                        return 0
+                    }
+                    onActivated: (index) => tileSettings.saveSetting(
+                        "preferredPlayer", index === 0 ? "" : model[index])
+                    implicitWidth: 180
                 }
             }
 
@@ -1471,6 +1867,26 @@ Flickable {
                     }
                     Text {
                         text: Math.round(artOpacitySlider.value * 100) + "%"
+                        color: themeManager.secondaryTextColor
+                        font.pixelSize: 12 * tileSettings.ts
+                    }
+                }
+            }
+
+            SettingsRow {
+                label: "Artwork zoom"
+                RowLayout {
+                    spacing: 8
+                    Slider {
+                        id: backgroundArtZoomSlider
+                        from: 1.0; to: 3.0; stepSize: 0.05
+                        value: tileSettings.settings.backgroundArtZoom || 1.0
+                        onMoved: tileSettings.saveSetting(
+                            "backgroundArtZoom", Math.round(value * 100) / 100)
+                        implicitWidth: 120
+                    }
+                    Text {
+                        text: Math.round(backgroundArtZoomSlider.value * 100) + "%"
                         color: themeManager.secondaryTextColor
                         font.pixelSize: 12 * tileSettings.ts
                     }
@@ -1785,35 +2201,12 @@ Flickable {
                 font.bold: true
             }
 
-            SettingsRow {
-                label: "Default monitor"
-                ComboBox {
-                    model: {
-                        var names = ["Interactive"]
-                        var monitors = monitorManager.monitors
-                        for (var i = 0; i < monitors.length; i++) names.push(monitors[i].name)
-                        return names
-                    }
-                    currentIndex: {
-                        var target = tileSettings.settings.defaultMonitor || ""
-                        if (target === "") return 0
-                        var monitors = monitorManager.monitors
-                        for (var i = 0; i < monitors.length; i++) {
-                            if (monitors[i].name === target) return i + 1
-                        }
-                        return 0
-                    }
-                    onActivated: (index) => {
-                        if (index === 0) {
-                            tileSettings.saveSetting("defaultMonitor", "")
-                        } else {
-                            var monitors = monitorManager.monitors
-                            if (index - 1 < monitors.length)
-                                tileSettings.saveSetting("defaultMonitor", monitors[index - 1].name)
-                        }
-                    }
-                    implicitWidth: 180
-                }
+            Text {
+                Layout.fillWidth: true
+                text: "Uses whichever action is currently assigned to Win+Shift+S in KDE System Settings."
+                color: themeManager.secondaryTextColor
+                font.pixelSize: 12 * tileSettings.ts
+                wrapMode: Text.WordWrap
             }
         }
 
@@ -1936,7 +2329,6 @@ Flickable {
 
             SettingsRow {
                 label: "History graph"
-                visible: (tileSettings.settings.monitorMode || "overview") !== "overview"
                 Switch {
                     checked: tileSettings.settings.showGraph !== false
                     onToggled: tileSettings.saveSetting("showGraph", checked)
@@ -1945,7 +2337,7 @@ Flickable {
 
             SettingsRow {
                 label: "Usage bar"
-                visible: ["cpu", "gpu", "memory", "storage"]
+                visible: ["overview", "cpu", "gpu", "memory", "storage"]
                     .indexOf(tileSettings.settings.monitorMode || "overview") >= 0
                 Switch {
                     checked: tileSettings.settings.showBar !== false

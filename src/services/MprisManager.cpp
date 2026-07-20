@@ -96,17 +96,48 @@ void MprisManager::discoverPlayers() {
 }
 
 void MprisManager::selectBestPlayer() {
-    if (playerNames_.isEmpty()) {
-        setCurrentPlayer(QString());
-        return;
+    setCurrentPlayer(resolvePreferredPlayer(playerNames_, QString()));
+}
+
+QString MprisManager::resolvePreferredPlayer(const QStringList &availablePlayers,
+                                              const QString &preferredPlayer) {
+    const QString preferred = preferredPlayer.trimmed();
+    if (!preferred.isEmpty()) {
+        for (const QString &available : availablePlayers) {
+            if (available.compare(preferred, Qt::CaseInsensitive) == 0)
+                return available;
+        }
+        return {};
     }
 
-    // Prefer Spotify, then first available
-    if (playerNames_.contains("spotify")) {
-        setCurrentPlayer("spotify");
-    } else {
-        setCurrentPlayer(playerNames_.first());
+    for (const QString &available : availablePlayers) {
+        if (available.compare(QStringLiteral("spotify"), Qt::CaseInsensitive) == 0)
+            return available;
     }
+    return availablePlayers.isEmpty() ? QString() : availablePlayers.first();
+}
+
+void MprisManager::selectPreferredPlayer(const QString &name) {
+    // "Auto" chooses a sensible player initially, but must not override a
+    // still-valid manual selection whenever a tile delegate is recreated.
+    if (name.trimmed().isEmpty() && playerNames_.contains(currentPlayer_))
+        return;
+    const QString resolved = resolvePreferredPlayer(playerNames_, name);
+    if (!resolved.isEmpty() || name.trimmed().isEmpty())
+        setCurrentPlayer(resolved);
+}
+
+qlonglong MprisManager::resolveDuration(const QVariantMap &metadata,
+                                        const QString &previousIdentity,
+                                        qlonglong previousDuration) {
+    const qlonglong reportedDuration = metadata.value("mpris:length", 0).toLongLong();
+    if (reportedDuration > 0)
+        return reportedDuration;
+
+    const QString identity = metadata.value("mpris:trackid").toString()
+        + u'\n' + metadata.value("xesam:url").toString()
+        + u'\n' + metadata.value("xesam:title").toString();
+    return identity == previousIdentity ? previousDuration : 0;
 }
 
 void MprisManager::setCurrentPlayer(const QString &name) {
@@ -161,7 +192,6 @@ void MprisManager::onNameOwnerChanged(const QString &service,
 void MprisManager::onPropertiesChanged(const QString &interface,
                                         const QVariantMap &changed,
                                         const QStringList &invalidated) {
-    Q_UNUSED(invalidated)
     if (interface != kPlayerInterface) return;
 
     if (changed.contains("PlaybackStatus")) {
@@ -172,7 +202,7 @@ void MprisManager::onPropertiesChanged(const QString &interface,
         }
     }
 
-    if (changed.contains("Metadata")) {
+    if (changed.contains("Metadata") || invalidated.contains("Metadata")) {
         fetchMetadata();
     } else if (changed.contains("PlaybackStatus")) {
         // Already handled above, but also refresh controls
@@ -211,6 +241,11 @@ void MprisManager::fetchMetadata() {
 
     auto metadata = qdbus_cast<QVariantMap>(reply.value().value<QDBusArgument>());
 
+    const QString newIdentity = metadata.value("mpris:trackid").toString()
+        + u'\n' + metadata.value("xesam:url").toString()
+        + u'\n' + metadata.value("xesam:title").toString();
+    const qlonglong newDuration = resolveDuration(metadata, metadataIdentity_, duration_);
+
     title_ = metadata.value("xesam:title").toString();
     album_ = metadata.value("xesam:album").toString();
     artUrl_ = metadata.value("mpris:artUrl").toString();
@@ -218,11 +253,12 @@ void MprisManager::fetchMetadata() {
         artUrl_ = youtubeArtworkUrl(metadata.value("xesam:url").toString());
     }
     trackId_ = metadata.value("mpris:trackid").toString();
+    metadataIdentity_ = newIdentity;
 
     auto artists = metadata.value("xesam:artist").toStringList();
     artist_ = artists.isEmpty() ? QString() : artists.join(", ");
 
-    duration_ = metadata.value("mpris:length", 0).toLongLong();
+    duration_ = newDuration;
 
     emit metadataChanged();
     fetchPlaybackStatus();

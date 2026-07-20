@@ -195,10 +195,7 @@ void CiderDeckApp::wireSignals() {
         toastModel_->showWithAction("Timer finished!", "Add 5min", "timer_add_5", 10000);
     });
 
-    // Screenshot toasts
-    QObject::connect(screenshotService_, &ScreenshotService::screenshotSaved, this, [this](const QString &path) {
-        toastModel_->show(QStringLiteral("Screenshot saved to ") + path, 5000);
-    });
+    // Screenshot errors
     QObject::connect(screenshotService_, &ScreenshotService::screenshotFailed, this, [this](const QString &error) {
         toastModel_->show(QStringLiteral("Screenshot failed: ") + error, 4000);
     });
@@ -291,8 +288,10 @@ void CiderDeckApp::setKeyboardEnabled(bool enabled) {
     auto *lw = LayerShellQt::Window::get(mainWindow_);
     if (!lw) return;
     lw->setKeyboardInteractivity(enabled
-        ? LayerShellQt::Window::KeyboardInteractivityOnDemand
+        ? LayerShellQt::Window::KeyboardInteractivityExclusive
         : LayerShellQt::Window::KeyboardInteractivityNone);
+    if (enabled)
+        mainWindow_->requestActivate();
 #else
     Q_UNUSED(enabled)
 #endif

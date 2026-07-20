@@ -3,10 +3,13 @@ import QtQuick
 Card {
     id: brightnessTile
 
+    property string tileId: parent ? parent.tileId : ""
     property string sizeClass: parent ? parent.sizeClass : "small"
     property var settings: parent ? parent.settings : ({})
+    property bool contentEditMode: parent ? parent.contentEditMode : false
+    property string selectedElement: parent ? parent.selectedContentElement : ""
     readonly property real contentScale: parent ? (parent.contentScale || 1) : 1
-    readonly property real railScale: Math.max(0.9, Math.min(1.35, contentScale))
+    readonly property real railScale: contentScale
 
     readonly property var monitors: {
         var raw = settings.brightnessMonitors
@@ -110,6 +113,11 @@ Card {
         showIcon: settings.showIcon !== false
         iconSource: "qrc:/icons/lucide/sun.svg"
         contentScale: brightnessTile.railScale
+        tileHost: brightnessTile
+        tileId: brightnessTile.tileId
+        tileSettings: brightnessTile.settings
+        contentEditMode: brightnessTile.contentEditMode
+        selectedElement: brightnessTile.selectedElement
         onValueRequested: (value) => brightnessTile.requestBrightness(value)
     }
 
@@ -123,11 +131,13 @@ Card {
         IconTouchButton {
             width: 34; height: 34; iconSize: 15
             source: "qrc:/icons/lucide/chevron-left.svg"
+            enabled: !brightnessTile.contentEditMode
             onClicked: brightnessTile.selectMonitor(-1)
         }
         IconTouchButton {
             width: 34; height: 34; iconSize: 15
             source: "qrc:/icons/lucide/chevron-right.svg"
+            enabled: !brightnessTile.contentEditMode
             onClicked: brightnessTile.selectMonitor(1)
         }
     }

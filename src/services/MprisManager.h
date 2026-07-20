@@ -54,6 +54,11 @@ public:
     bool isSpotify() const;
     QString playerIcon() const;
     int playerCount() const { return playerNames_.size(); }
+    static QString resolvePreferredPlayer(const QStringList &availablePlayers,
+                                          const QString &preferredPlayer);
+    static qlonglong resolveDuration(const QVariantMap &metadata,
+                                     const QString &previousIdentity,
+                                     qlonglong previousDuration);
 
     Q_INVOKABLE void playPause();
     Q_INVOKABLE void next();
@@ -62,6 +67,7 @@ public:
     Q_INVOKABLE void setPosition(qlonglong positionUs);
     Q_INVOKABLE void selectNextPlayer();
     Q_INVOKABLE void selectPreviousPlayer();
+    Q_INVOKABLE void selectPreferredPlayer(const QString &name);
     Q_INVOKABLE void toggleShuffle();
     Q_INVOKABLE void cycleLoopStatus();
     Q_INVOKABLE void skipForward(int seconds);
@@ -104,6 +110,7 @@ private:
     QString album_;
     QString artUrl_;
     QString trackId_;
+    QString metadataIdentity_;
     QString playbackStatus_;
     qlonglong position_ = 0;
     qlonglong duration_ = 0;

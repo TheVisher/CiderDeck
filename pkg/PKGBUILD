@@ -14,6 +14,7 @@ depends=(
   'kwindowsystem'
   'kstatusnotifieritem'
   'pulseaudio-qt'
+  'ddcutil'
 )
 makedepends=(
   'cmake'
@@ -22,15 +23,15 @@ makedepends=(
   'kwindowsystem'
   'kstatusnotifieritem'
   'pulseaudio-qt'
-  'ddcutil'
-  'qt6-multimedia'
 )
 optdepends=(
-  'ddcutil: monitor brightness via DDC/CI'
   'pacman-contrib: official repository update checks'
   'paru: AUR update checks and interactive system updates'
   'flatpak: Flatpak update checks and interactive updates'
   'konsole: interactive update terminal'
+  'easyeffects: audio mixer EQ preset support'
+  'nvidia-utils: NVIDIA GPU monitoring'
+  'gtk3: launching applications through gtk-launch'
 )
 source=("${pkgname}::git+file://$(cd "${PWD}/.." && pwd)#branch=ciderdeck-next")
 sha256sums=('SKIP')

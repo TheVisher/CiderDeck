@@ -67,10 +67,10 @@ Card {
                 }
 
                 IconTouchButton {
-                    Layout.preferredWidth: 38
-                    Layout.preferredHeight: 38
+                    Layout.preferredWidth: 38 * updatesTile.contentScale
+                    Layout.preferredHeight: 38 * updatesTile.contentScale
                     source: "qrc:/icons/lucide/rotate-ccw.svg"
-                    iconSize: 17
+                    iconSize: 17 * updatesTile.contentScale
                     enabled: !updateService.checking
                     onClicked: updateService.refresh()
 
@@ -86,7 +86,7 @@ Card {
 
             RowLayout {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 54
+                Layout.preferredHeight: 54 * updatesTile.contentScale
                 spacing: 0
 
                 Repeater {
@@ -151,8 +151,8 @@ Card {
                         spacing: 9
 
                         LucideIcon {
-                            width: 22
-                            height: 22
+                            width: 22 * updatesTile.contentScale
+                            height: width
                             source: "qrc:/icons/lucide/check.svg"
                             color: themeManager.successColor
                         }
@@ -198,7 +198,7 @@ Card {
             Rectangle {
                 id: updateButton
                 Layout.fillWidth: true
-                Layout.preferredHeight: 42
+                Layout.preferredHeight: 42 * updatesTile.contentScale
                 radius: 6
                 color: updateMouse.pressed
                        ? Qt.rgba(updatesTile.statusColor.r, updatesTile.statusColor.g,
@@ -215,8 +215,8 @@ Card {
                     spacing: 9
 
                     LucideIcon {
-                        width: 17
-                        height: 17
+                        width: 17 * updatesTile.contentScale
+                        height: width
                         source: "qrc:/icons/lucide/terminal.svg"
                         color: updatesTile.statusColor
                     }

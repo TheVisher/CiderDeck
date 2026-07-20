@@ -3,46 +3,45 @@ import QtQuick
 Card {
     id: clockTile
 
+    property string tileId: parent ? parent.tileId : ""
     property string sizeClass: parent ? parent.sizeClass : "small"
     property var settings: parent ? parent.settings : ({})
+    property bool contentEditMode: parent ? parent.contentEditMode : false
+    property string selectedElement: parent ? parent.selectedContentElement : ""
     readonly property real contentScale: parent ? (parent.contentScale || 1.0) : 1.0
 
-    // Settings
     readonly property string timeFormat: settings.timeFormat || "12h"
     readonly property string dateFormat: settings.dateFormat || "ddd, MMM d"
     readonly property bool showSeconds: settings.showSeconds || false
     readonly property bool wantDate: settings.showDate !== false
     readonly property string clockStyle: settings.clockStyle || "classic"
     readonly property string datePosition: settings.datePosition || "below"
+    readonly property bool pairDate: datePosition === "below" || datePosition === "above"
+    readonly property bool dateAbove: datePosition === "above"
 
-    // Shared time properties updated by timer
-    property string currentTime: ""
     property string currentDate: ""
+    property string currentModernDate: ""
     property string currentDayName: ""
     property string currentHour: ""
     property string currentMinute: ""
     property string currentSecond: ""
     property string currentAmPm: ""
 
-    // Classic overflow detection
-    readonly property real pad: 12
-    readonly property real availH: height - pad * 2
-    readonly property real classicTimeH: classicTimeText.implicitHeight
-    readonly property real classicDateH: classicDateText.implicitHeight
-    readonly property real classicPairH: classicTimeH + 4 + classicDateH
-    readonly property bool dateFits: classicPairH <= availH
-
-    function formatTime(date) {
-        if (timeFormat === "24h") {
-            return showSeconds ? Qt.formatTime(date, "HH:mm:ss") : Qt.formatTime(date, "HH:mm")
-        } else {
-            return showSeconds ? Qt.formatTime(date, "h:mm:ss AP") : Qt.formatTime(date, "h:mm AP")
-        }
+    readonly property string mainTimeText: {
+        var hour = currentHour
+        if (clockStyle === "classic" && timeFormat === "12h" && hour.charAt(0) === "0")
+            hour = hour.substring(1)
+        var result = hour + ":" + currentMinute
+        if (clockStyle === "modern" && showSeconds)
+            result += ":" + currentSecond
+        return result
     }
-
-    function formatDate(date) {
-        return Qt.formatDate(date, dateFormat)
-    }
+    readonly property string displayedDate: clockStyle === "modern"
+                                                    ? currentModernDate : currentDate
+    readonly property real baseDimension: Math.min(width, height)
+    readonly property real flipBaseCardWidth: Math.max(12, Math.min(
+        (width - 64) / (showSeconds ? 7.8 : 4.35),
+        (height - 44) * 0.31))
 
     Timer {
         interval: clockTile.showSeconds ? 1000 : 15000
@@ -51,634 +50,389 @@ Card {
         triggeredOnStart: true
         onTriggered: {
             var now = new Date()
-            clockTile.currentTime = clockTile.formatTime(now)
-            clockTile.currentDate = clockTile.formatDate(now)
-            clockTile.currentDayName = Qt.formatDate(now, "dddd").toUpperCase()
-            var h = now.getHours()
-            var m = now.getMinutes()
-            var s = now.getSeconds()
+            var hours = now.getHours()
+            var minutes = now.getMinutes()
+            var seconds = now.getSeconds()
+            clockTile.currentAmPm = ""
             if (clockTile.timeFormat === "12h") {
-                clockTile.currentAmPm = h >= 12 ? "PM" : "AM"
-                h = h % 12
-                if (h === 0) h = 12
-            } else {
-                clockTile.currentAmPm = ""
+                clockTile.currentAmPm = hours >= 12 ? "PM" : "AM"
+                hours = hours % 12
+                if (hours === 0) hours = 12
             }
-            clockTile.currentHour = (h < 10 ? "0" : "") + h
-            clockTile.currentMinute = (m < 10 ? "0" : "") + m
-            clockTile.currentSecond = (s < 10 ? "0" : "") + s
-
-            // Modern date: "13 FEB 2026" format
-            var months = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"]
-            clockTile.currentDate = clockTile.formatDate(now)
-            // Store modern date separately via the property; modern style builds its own
+            clockTile.currentHour = (hours < 10 ? "0" : "") + hours
+            clockTile.currentMinute = (minutes < 10 ? "0" : "") + minutes
+            clockTile.currentSecond = (seconds < 10 ? "0" : "") + seconds
+            clockTile.currentDate = Qt.formatDate(now, clockTile.dateFormat)
+            clockTile.currentDayName = Qt.formatDate(now, "dddd").toUpperCase()
+            var months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN",
+                          "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
+            clockTile.currentModernDate = now.getDate() + " "
+                                        + months[now.getMonth()] + " " + now.getFullYear()
         }
     }
 
-    // ─── Classic Style ───
     Item {
-        id: classicRoot
+        id: contentCanvas
         anchors.fill: parent
-        visible: clockTile.clockStyle === "classic"
+        anchors.margins: 12
 
-        // Whether date goes above/below (pair mode) vs corner/edge (independent mode)
-        readonly property bool pairMode: clockTile.datePosition === "below" || clockTile.datePosition === "above"
-        readonly property bool dateAbove: clockTile.datePosition === "above"
-        readonly property bool showDate: clockTile.wantDate && clockTile.dateFits
+        readonly property real itemGap: 10
+        readonly property real rowHeight: Math.max(timeItem.height,
+                                                    secondsItem.visible ? secondsItem.height : 0,
+                                                    periodItem.visible && clockTile.clockStyle !== "flip"
+                                                    ? periodItem.height : 0)
+        readonly property real rowWidth: timeItem.width
+                                           + (secondsItem.visible ? itemGap + secondsItem.width : 0)
+                                           + (periodItem.visible && clockTile.clockStyle !== "flip"
+                                              ? itemGap + periodItem.width : 0)
+        readonly property real pairedDateHeight: dateItem.visible && clockTile.pairDate
+                                                  ? itemGap + dateItem.height : 0
+        readonly property real modernTotalHeight: (dayItem.visible ? dayItem.height + itemGap : 0)
+                                                   + rowHeight + pairedDateHeight
+        readonly property real classicTotalHeight: rowHeight + pairedDateHeight
+        readonly property real flipPeriodHeight: periodItem.visible
+                                                 ? itemGap + periodItem.height : 0
+        readonly property real flipTotalHeight: rowHeight + flipPeriodHeight
+                                                + pairedDateHeight
+        readonly property real modernStartY: Math.max(0, (height - modernTotalHeight) / 2)
+        readonly property real classicStartY: Math.max(0, (height - classicTotalHeight) / 2)
+        readonly property real flipStartY: Math.max(0, (height - flipTotalHeight) / 2)
 
-        // Pair container — used for above/below positions
-        Column {
-            id: classicPair
-            visible: classicRoot.pairMode
-            anchors.centerIn: parent
-            width: parent.width - 16
-            spacing: 4
+        function timeDefaultY() {
+            if (clockTile.clockStyle === "modern")
+                return modernStartY
+                    + (dateItem.visible && clockTile.dateAbove ? dateItem.height + itemGap : 0)
+                    + (dayItem.visible ? dayItem.height + itemGap : 0)
+            if (clockTile.clockStyle === "flip")
+                return flipStartY
+                    + (dateItem.visible && clockTile.dateAbove ? dateItem.height + itemGap : 0)
+            return classicStartY
+                + (dateItem.visible && clockTile.dateAbove ? dateItem.height + itemGap : 0)
+        }
 
-            Text {
-                id: classicDateAbove
-                anchors.horizontalCenter: parent.horizontalCenter
-                width: parent.width
-                horizontalAlignment: Text.AlignHCenter
-                color: themeManager.secondaryTextColor
-                visible: classicRoot.showDate && classicRoot.dateAbove
-                text: clockTile.currentDate
-                font.pixelSize: Math.min(clockTile.width, clockTile.height) * 0.1 * clockTile.contentScale
-                fontSizeMode: Text.HorizontalFit
-                minimumPixelSize: 8
+        function dateDefaultX() {
+            switch (clockTile.datePosition) {
+            case "top-left":
+            case "bottom-left": return 0
+            case "top-right":
+            case "bottom-right": return width - dateItem.width
+            default: return (width - dateItem.width) / 2
             }
+        }
 
+        function dateDefaultY() {
+            if (clockTile.pairDate) {
+                if (clockTile.dateAbove) {
+                    if (clockTile.clockStyle === "modern") return modernStartY
+                    if (clockTile.clockStyle === "flip") return flipStartY
+                    return classicStartY
+                }
+                var bottom = timeItem.y + rowHeight
+                if (clockTile.clockStyle === "flip" && periodItem.visible)
+                    bottom = periodItem.y + periodItem.height
+                return bottom + itemGap
+            }
+            switch (clockTile.datePosition) {
+            case "top-left":
+            case "top-right":
+            case "top-center": return 0
+            default: return height - dateItem.height
+            }
+        }
+
+        Item {
+            id: dayItem
+            width: dayRow.implicitWidth
+            height: dayRow.implicitHeight
+            x: contentLayout.hasSavedValue("day", "x")
+               ? contentLayout.elementX("day") : (contentCanvas.width - width) / 2
+            y: contentLayout.hasSavedValue("day", "y")
+               ? contentLayout.elementY("day")
+               : contentCanvas.modernStartY
+                 + (dateItem.visible && clockTile.dateAbove
+                    ? dateItem.height + contentCanvas.itemGap : 0)
+            visible: clockTile.clockStyle === "modern" && contentLayout.elementVisible("day")
+            z: clockTile.selectedElement === "day" ? 20 : 1
+            Row {
+                id: dayRow
+                spacing: 10 * clockTile.contentScale
+                         * contentLayout.elementScale("day")
+
+                Rectangle {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Math.max(18, clockTile.baseDimension * 0.09)
+                           * contentLayout.elementScale("day")
+                    height: Math.max(2, 2 * clockTile.contentScale
+                                          * contentLayout.elementScale("day"))
+                    radius: height / 2
+                    color: themeManager.textColor
+                    opacity: 0.8
+                }
+
+                Text {
+                    id: dayVisual
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: clockTile.currentDayName
+                    color: themeManager.textColor
+                    font.pixelSize: clockTile.baseDimension * 0.2 * clockTile.contentScale
+                                    * contentLayout.elementFontScale("day")
+                    font.weight: Font.Bold
+                    font.letterSpacing: 3
+                    renderType: Text.NativeRendering
+                }
+
+                Rectangle {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Math.max(18, clockTile.baseDimension * 0.09)
+                           * contentLayout.elementScale("day")
+                    height: Math.max(2, 2 * clockTile.contentScale
+                                          * contentLayout.elementScale("day"))
+                    radius: height / 2
+                    color: themeManager.textColor
+                    opacity: 0.8
+                }
+            }
+            ContentEditableFrame { host: contentLayout; elementId: "day" }
+        }
+
+        Item {
+            id: timeItem
+            width: timeLoader.implicitWidth
+            height: timeLoader.implicitHeight
+            x: contentLayout.hasSavedValue("time", "x")
+               ? contentLayout.elementX("time")
+               : (contentCanvas.width - contentCanvas.rowWidth) / 2
+            y: contentLayout.hasSavedValue("time", "y")
+               ? contentLayout.elementY("time") : contentCanvas.timeDefaultY()
+            visible: contentLayout.elementVisible("time")
+            z: clockTile.selectedElement === "time" ? 20 : 1
+            Loader {
+                id: timeLoader
+                sourceComponent: clockTile.clockStyle === "flip" ? flipTimeComponent : timeTextComponent
+            }
+            ContentEditableFrame { host: contentLayout; elementId: "time" }
+        }
+
+        Item {
+            id: secondsItem
+            width: secondsLoader.implicitWidth
+            height: secondsLoader.implicitHeight
+            x: contentLayout.hasSavedValue("seconds", "x")
+               ? contentLayout.elementX("seconds")
+               : timeItem.x + timeItem.width + contentCanvas.itemGap
+            y: contentLayout.hasSavedValue("seconds", "y")
+               ? contentLayout.elementY("seconds")
+               : timeItem.y + timeItem.height - height
+            visible: clockTile.showSeconds && clockTile.clockStyle === "classic"
+                     && contentLayout.elementVisible("seconds")
+            z: clockTile.selectedElement === "seconds" ? 20 : 1
+            Loader {
+                id: secondsLoader
+                sourceComponent: secondsTextComponent
+            }
+            ContentEditableFrame { host: contentLayout; elementId: "seconds" }
+        }
+
+        Item {
+            id: periodItem
+            width: periodText.implicitWidth
+            height: periodText.implicitHeight
+            x: contentLayout.hasSavedValue("period", "x")
+               ? contentLayout.elementX("period")
+               : clockTile.clockStyle === "flip"
+                 ? (contentCanvas.width - width) / 2
+                 : (secondsItem.visible ? secondsItem.x + secondsItem.width
+                                        : timeItem.x + timeItem.width) + contentCanvas.itemGap
+            y: contentLayout.hasSavedValue("period", "y")
+               ? contentLayout.elementY("period")
+               : clockTile.clockStyle === "flip"
+                 ? timeItem.y + contentCanvas.rowHeight + contentCanvas.itemGap
+                 : timeItem.y + timeItem.height - height
+            visible: clockTile.timeFormat === "12h" && contentLayout.elementVisible("period")
+            z: clockTile.selectedElement === "period" ? 20 : 1
             Text {
-                id: classicTimeText
-                anchors.horizontalCenter: parent.horizontalCenter
-                width: parent.width
-                horizontalAlignment: Text.AlignHCenter
-                color: themeManager.textColor
-                text: clockTile.currentTime
-                font.pixelSize: Math.min(clockTile.width, clockTile.height) * 0.25 * clockTile.contentScale
+                id: periodText
+                text: clockTile.currentAmPm
+                color: themeManager.secondaryTextColor
+                font.pixelSize: (clockTile.clockStyle === "flip"
+                                 ? clockTile.flipBaseCardWidth / 0.6 * 0.18
+                                 : clockTile.baseDimension * 0.075)
+                                * clockTile.contentScale
+                                * contentLayout.elementFontScale("period")
                 font.weight: Font.DemiBold
-                fontSizeMode: Text.HorizontalFit
-                minimumPixelSize: 10
+                font.letterSpacing: clockTile.clockStyle === "modern" ? 2 : 1
+                renderType: Text.NativeRendering
             }
-
-            Text {
-                id: classicDateText
-                anchors.horizontalCenter: parent.horizontalCenter
-                width: parent.width
-                horizontalAlignment: Text.AlignHCenter
-                color: themeManager.secondaryTextColor
-                visible: classicRoot.showDate && !classicRoot.dateAbove
-                text: clockTile.currentDate
-                font.pixelSize: Math.min(clockTile.width, clockTile.height) * 0.1 * clockTile.contentScale
-                fontSizeMode: Text.HorizontalFit
-                minimumPixelSize: 8
-            }
+            ContentEditableFrame { host: contentLayout; elementId: "period" }
         }
 
-        // Independent mode — time centered, date positioned independently
+        Item {
+            id: dateItem
+            width: dateText.implicitWidth
+            height: dateText.implicitHeight
+            x: contentLayout.hasSavedValue("date", "x")
+               ? contentLayout.elementX("date") : contentCanvas.dateDefaultX()
+            y: contentLayout.hasSavedValue("date", "y")
+               ? contentLayout.elementY("date") : contentCanvas.dateDefaultY()
+            visible: clockTile.wantDate && contentLayout.elementVisible("date")
+            z: clockTile.selectedElement === "date" ? 20 : 1
+            Text {
+                id: dateText
+                text: clockTile.displayedDate
+                color: themeManager.secondaryTextColor
+                font.pixelSize: clockTile.baseDimension * 0.1 * clockTile.contentScale
+                                * contentLayout.elementFontScale("date")
+                font.letterSpacing: clockTile.clockStyle === "modern" ? 2 : 0
+                renderType: Text.NativeRendering
+            }
+            ContentEditableFrame { host: contentLayout; elementId: "date" }
+        }
+    }
+
+    Component {
+        id: timeTextComponent
         Text {
-            id: classicTimeCentered
-            visible: !classicRoot.pairMode
-            anchors.centerIn: parent
-            width: parent.width - 16
-            horizontalAlignment: Text.AlignHCenter
+            text: clockTile.mainTimeText
             color: themeManager.textColor
-            text: clockTile.currentTime
-            font.pixelSize: Math.min(clockTile.width, clockTile.height) * 0.25 * clockTile.contentScale
-            font.weight: Font.DemiBold
-            fontSizeMode: Text.HorizontalFit
-            minimumPixelSize: 10
-        }
-
-        Text {
-            id: classicDateIndependent
-            visible: !classicRoot.pairMode && classicRoot.showDate
-            text: clockTile.currentDate
-            color: themeManager.secondaryTextColor
-            font.pixelSize: Math.min(clockTile.width, clockTile.height) * 0.1 * clockTile.contentScale
-            fontSizeMode: Text.HorizontalFit
-            minimumPixelSize: 8
-            width: Math.min(implicitWidth, parent.width - 16)
-
-            // Position based on datePosition
-            x: {
-                switch (clockTile.datePosition) {
-                    case "top-left":
-                    case "bottom-left":
-                        return 8
-                    case "top-right":
-                    case "bottom-right":
-                        return parent.width - width - 8
-                    case "top-center":
-                    case "bottom-center":
-                    default:
-                        return (parent.width - width) / 2
-                }
-            }
-            y: {
-                switch (clockTile.datePosition) {
-                    case "top-left":
-                    case "top-right":
-                    case "top-center":
-                        return 8
-                    case "bottom-left":
-                    case "bottom-right":
-                    case "bottom-center":
-                    default:
-                        return parent.height - height - 8
-                }
-            }
-
-            horizontalAlignment: {
-                switch (clockTile.datePosition) {
-                    case "top-left":
-                    case "bottom-left":
-                        return Text.AlignLeft
-                    case "top-right":
-                    case "bottom-right":
-                        return Text.AlignRight
-                    default:
-                        return Text.AlignHCenter
-                }
-            }
+            font.pixelSize: clockTile.baseDimension
+                            * (clockTile.clockStyle === "modern" ? 0.14 : 0.25)
+                            * clockTile.contentScale
+                            * contentLayout.elementFontScale("time")
+            font.weight: clockTile.clockStyle === "classic" ? Font.DemiBold : Font.Normal
+            font.letterSpacing: clockTile.clockStyle === "modern" ? 2 : 0
+            renderType: Text.NativeRendering
         }
     }
 
-    // ─── Modern Style ───
-    Item {
-        id: modernRoot
-        anchors.fill: parent
-        visible: clockTile.clockStyle === "modern"
-
-        readonly property bool pairMode: clockTile.datePosition === "below" || clockTile.datePosition === "above"
-        readonly property bool dateAbove: clockTile.datePosition === "above"
-        readonly property real dateFontSize: Math.min(clockTile.width, clockTile.height) * 0.1 * clockTile.contentScale
-
-        // Compute modern date string (hardcoded uppercase format)
-        property string modernDateStr: ""
-        Connections {
-            target: clockTile
-            function onCurrentTimeChanged() {
-                var now = new Date()
-                var months = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"]
-                modernRoot.modernDateStr = now.getDate() + " " + months[now.getMonth()] + " " + now.getFullYear()
-            }
-        }
-        Component.onCompleted: {
-            var now = new Date()
-            var months = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"]
-            modernDateStr = now.getDate() + " " + months[now.getMonth()] + " " + now.getFullYear()
-        }
-
-        Column {
-            anchors.centerIn: parent
-            width: parent.width - 24
-            spacing: Math.max(2, parent.height * 0.02)
-
-            // Date above
-            Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                width: parent.width
-                horizontalAlignment: Text.AlignHCenter
-                visible: clockTile.wantDate && modernRoot.pairMode && modernRoot.dateAbove
-                text: modernRoot.modernDateStr
-                color: themeManager.secondaryTextColor
-                font.pixelSize: modernRoot.dateFontSize
-                font.letterSpacing: 2
-                fontSizeMode: Text.HorizontalFit
-                minimumPixelSize: 8
-            }
-
-            Text {
-                id: modernDayName
-                anchors.horizontalCenter: parent.horizontalCenter
-                width: parent.width
-                horizontalAlignment: Text.AlignHCenter
-                text: clockTile.currentDayName
-                color: themeManager.textColor
-                font.pixelSize: Math.min(clockTile.width, clockTile.height) * 0.2 * clockTile.contentScale
-                font.weight: Font.Bold
-                font.letterSpacing: 3
-                fontSizeMode: Text.HorizontalFit
-                minimumPixelSize: 10
-            }
-
-            Text {
-                id: modernTime
-                anchors.horizontalCenter: parent.horizontalCenter
-                width: parent.width
-                horizontalAlignment: Text.AlignHCenter
-                color: themeManager.textColor
-                font.pixelSize: Math.min(clockTile.width, clockTile.height) * 0.14 * clockTile.contentScale
-                font.letterSpacing: 2
-                fontSizeMode: Text.HorizontalFit
-                minimumPixelSize: 8
-                text: {
-                    var t = clockTile.currentHour + ":" + clockTile.currentMinute
-                    if (clockTile.showSeconds) t += ":" + clockTile.currentSecond
-                    if (clockTile.currentAmPm) t += " " + clockTile.currentAmPm
-                    return "\u2014 " + t + " \u2014"
-                }
-            }
-
-            // Date below
-            Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                width: parent.width
-                horizontalAlignment: Text.AlignHCenter
-                visible: clockTile.wantDate && modernRoot.pairMode && !modernRoot.dateAbove
-                text: modernRoot.modernDateStr
-                color: themeManager.secondaryTextColor
-                font.pixelSize: modernRoot.dateFontSize
-                font.letterSpacing: 2
-                fontSizeMode: Text.HorizontalFit
-                minimumPixelSize: 8
-            }
-        }
-
-        // Independent date for corner/edge positions
+    Component {
+        id: secondsTextComponent
         Text {
-            visible: clockTile.wantDate && !modernRoot.pairMode
-            text: modernRoot.modernDateStr
-            color: themeManager.secondaryTextColor
-            font.pixelSize: modernRoot.dateFontSize
-            font.letterSpacing: 2
-            fontSizeMode: Text.HorizontalFit
-            minimumPixelSize: 8
-            width: Math.min(implicitWidth, parent.width - 16)
-
-            x: {
-                switch (clockTile.datePosition) {
-                    case "top-left":
-                    case "bottom-left":
-                        return 8
-                    case "top-right":
-                    case "bottom-right":
-                        return parent.width - width - 8
-                    default:
-                        return (parent.width - width) / 2
-                }
-            }
-            y: {
-                switch (clockTile.datePosition) {
-                    case "top-left":
-                    case "top-right":
-                    case "top-center":
-                        return 8
-                    default:
-                        return parent.height - height - 8
-                }
-            }
-            horizontalAlignment: {
-                switch (clockTile.datePosition) {
-                    case "top-left":
-                    case "bottom-left":
-                        return Text.AlignLeft
-                    case "top-right":
-                    case "bottom-right":
-                        return Text.AlignRight
-                    default:
-                        return Text.AlignHCenter
-                }
-            }
+            text: ":" + clockTile.currentSecond
+            color: themeManager.textColor
+            font.pixelSize: clockTile.baseDimension
+                            * (clockTile.clockStyle === "modern" ? 0.14 : 0.18)
+                            * clockTile.contentScale
+                            * contentLayout.elementFontScale("seconds")
+            font.weight: clockTile.clockStyle === "classic" ? Font.DemiBold : Font.Normal
+            font.letterSpacing: clockTile.clockStyle === "modern" ? 2 : 0
+            renderType: Text.NativeRendering
         }
     }
 
-    // ─── Flip Style ───
-    Item {
-        id: flipRoot
-        anchors.fill: parent
-        visible: clockTile.clockStyle === "flip"
-
-        readonly property real cardAspect: 0.6
-        readonly property int digitCount: clockTile.showSeconds ? 6 : 4
-        readonly property int separatorCount: clockTile.showSeconds ? 2 : 1
-        readonly property bool showAmPm: clockTile.timeFormat === "12h"
-
-        // Calculate card dimensions to fit the tile, accounting for spacing
-        readonly property real availWidth: parent.width - 20
-        readonly property real availHeight: parent.height - (showAmPm ? 30 : 12)
-        // Total items in the row: digits + separators
-        readonly property int itemCount: digitCount + separatorCount
-        // Spacing between items (estimated, refined after cardW is known)
-        readonly property real estSpacing: Math.max(2, availWidth * 0.012)
-        readonly property real totalSpacingW: estSpacing * (itemCount - 1)
-        // Each separator takes ~0.35 card widths, each digit takes 1 card width
-        readonly property real totalUnits: digitCount + separatorCount * 0.35
-        readonly property real cardW: Math.min((availWidth - totalSpacingW) / totalUnits,
-                                               availHeight * cardAspect)
-        readonly property real cardH: cardW / cardAspect
-
+    Component {
+        id: flipTimeComponent
         Row {
-            id: flipRow
-            anchors.centerIn: parent
-            anchors.verticalCenterOffset: flipRoot.showAmPm ? -8 : 0
-            spacing: flipRoot.estSpacing
-
-            // Hour digit 1
-            Loader { sourceComponent: flipDigit; property string digit: clockTile.currentHour.charAt(0) }
-            // Hour digit 2
-            Loader { sourceComponent: flipDigit; property string digit: clockTile.currentHour.charAt(1) }
-
-            // Colon 1
-            Loader { sourceComponent: flipColon }
-
-            // Minute digit 1
-            Loader { sourceComponent: flipDigit; property string digit: clockTile.currentMinute.charAt(0) }
-            // Minute digit 2
-            Loader { sourceComponent: flipDigit; property string digit: clockTile.currentMinute.charAt(1) }
-
-            // Second digits (conditional)
-            Loader {
-                active: clockTile.showSeconds
-                visible: active
-                sourceComponent: flipColon
-            }
-            Loader {
-                active: clockTile.showSeconds
-                visible: active
-                sourceComponent: flipDigit
-                property string digit: clockTile.currentSecond.charAt(0)
-            }
-            Loader {
-                active: clockTile.showSeconds
-                visible: active
-                sourceComponent: flipDigit
-                property string digit: clockTile.currentSecond.charAt(1)
-            }
-        }
-
-        // AM/PM label
-        Text {
-            id: flipAmPm
-            visible: flipRoot.showAmPm
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.top: flipRow.bottom
-            anchors.topMargin: 4
-            text: clockTile.currentAmPm
-            color: themeManager.secondaryTextColor
-            font.pixelSize: flipRoot.cardH * 0.18 * clockTile.contentScale
-            font.weight: Font.DemiBold
-            font.letterSpacing: 2
-        }
-
-        // Date — positioned independently for all 8 positions
-        // "above"/"below" go centered above/below the flip cards
-        // corners/edges go to the tile edges
-        Text {
-            visible: clockTile.wantDate
-            text: clockTile.currentDate
-            color: themeManager.secondaryTextColor
-            font.pixelSize: Math.min(clockTile.width, clockTile.height) * 0.1 * clockTile.contentScale
-            fontSizeMode: Text.HorizontalFit
-            minimumPixelSize: 8
-            width: Math.min(implicitWidth, parent.width - 16)
-
-            x: {
-                switch (clockTile.datePosition) {
-                    case "top-left":
-                    case "bottom-left":
-                        return 8
-                    case "top-right":
-                    case "bottom-right":
-                        return parent.width - width - 8
-                    default:
-                        return (parent.width - width) / 2
-                }
-            }
-            y: {
-                switch (clockTile.datePosition) {
-                    case "above":
-                        return flipRow.y - height - 6
-                    case "top-left":
-                    case "top-right":
-                    case "top-center":
-                        return 8
-                    case "below":
-                        // Below AM/PM if visible, otherwise below flip row
-                        return (flipRoot.showAmPm ? flipAmPm.y + flipAmPm.height : flipRow.y + flipRow.height) + 6
-                    default:
-                        return parent.height - height - 8
-                }
-            }
-            horizontalAlignment: {
-                switch (clockTile.datePosition) {
-                    case "top-left":
-                    case "bottom-left":
-                        return Text.AlignLeft
-                    case "top-right":
-                    case "bottom-right":
-                        return Text.AlignRight
-                    default:
-                        return Text.AlignHCenter
-                }
-            }
+            spacing: Math.max(2, clockTile.flipBaseCardWidth * 0.08)
+            Loader { sourceComponent: flipDigit; property string digit: clockTile.currentHour.charAt(0); property real cardWidth: clockTile.flipBaseCardWidth * contentLayout.elementScale("time"); property real digitScale: contentLayout.elementTextScale("time") }
+            Loader { sourceComponent: flipDigit; property string digit: clockTile.currentHour.charAt(1); property real cardWidth: clockTile.flipBaseCardWidth * contentLayout.elementScale("time"); property real digitScale: contentLayout.elementTextScale("time") }
+            Loader { sourceComponent: flipColon; property real cardWidth: clockTile.flipBaseCardWidth * contentLayout.elementScale("time") }
+            Loader { sourceComponent: flipDigit; property string digit: clockTile.currentMinute.charAt(0); property real cardWidth: clockTile.flipBaseCardWidth * contentLayout.elementScale("time"); property real digitScale: contentLayout.elementTextScale("time") }
+            Loader { sourceComponent: flipDigit; property string digit: clockTile.currentMinute.charAt(1); property real cardWidth: clockTile.flipBaseCardWidth * contentLayout.elementScale("time"); property real digitScale: contentLayout.elementTextScale("time") }
+            Loader { active: clockTile.showSeconds; visible: active; sourceComponent: flipColon; property real cardWidth: clockTile.flipBaseCardWidth * contentLayout.elementScale("time") }
+            Loader { active: clockTile.showSeconds; visible: active; sourceComponent: flipDigit; property string digit: clockTile.currentSecond.charAt(0); property real cardWidth: clockTile.flipBaseCardWidth * contentLayout.elementScale("time"); property real digitScale: contentLayout.elementTextScale("time") }
+            Loader { active: clockTile.showSeconds; visible: active; sourceComponent: flipDigit; property string digit: clockTile.currentSecond.charAt(1); property real cardWidth: clockTile.flipBaseCardWidth * contentLayout.elementScale("time"); property real digitScale: contentLayout.elementTextScale("time") }
         }
     }
 
-    // ─── Flip Digit Card Component (animated split-flap) ───
     Component {
         id: flipDigit
-
         Item {
-            id: dCard
-            width: flipRoot.cardW
-            height: flipRoot.cardH
-
+            id: digitCard
+            width: parent.cardWidth
+            height: width / 0.6
             property string targetDigit: parent.digit || "0"
             property string shownDigit: targetDigit
-            property real flipPhase: 0  // 0=idle, 0→0.5=top falls, 0.5→1=bottom rises
-            readonly property bool isFlipping: flipAnim.running
-
-            readonly property real cardRadius: Math.max(2, flipRoot.cardW * 0.08)
-            readonly property color cardBg: Qt.darker(themeManager.backgroundColor, 1.4)
-            readonly property color cardBorder: Qt.rgba(themeManager.borderColor.r,
-                                                        themeManager.borderColor.g,
-                                                        themeManager.borderColor.b, 0.6)
-            readonly property real fontSize: flipRoot.cardH * 0.65 * clockTile.contentScale
+            property real flipPhase: 0
+            readonly property bool isFlipping: flipAnimation.running
+            readonly property real cardRadius: Math.max(2, width * 0.08)
+            readonly property color cardBackground: Qt.darker(themeManager.backgroundColor, 1.4)
+            readonly property real digitFontSize: height * 0.65 * clockTile.contentScale
+                                                       * (parent.digitScale || 1)
 
             onTargetDigitChanged: {
-                if (shownDigit !== targetDigit && !flipAnim.running) {
-                    flipAnim.start()
-                }
+                if (shownDigit !== targetDigit && !flipAnimation.running)
+                    flipAnimation.start()
             }
-
             SequentialAnimation {
-                id: flipAnim
-                // Phase 1: top flap folds down (old digit)
-                NumberAnimation {
-                    target: dCard; property: "flipPhase"
-                    from: 0; to: 0.5; duration: 200
-                    easing.type: Easing.InQuad
-                }
-                // Phase 2: bottom flap unfolds (new digit)
-                NumberAnimation {
-                    target: dCard; property: "flipPhase"
-                    from: 0.5; to: 1.0; duration: 200
-                    easing.type: Easing.OutQuad
-                }
-                // Swap shown digit after flap has fully landed
-                ScriptAction { script: dCard.shownDigit = dCard.targetDigit }
-                PropertyAction { target: dCard; property: "flipPhase"; value: 0 }
+                id: flipAnimation
+                NumberAnimation { target: digitCard; property: "flipPhase"; from: 0; to: 0.5; duration: 200; easing.type: Easing.InQuad }
+                NumberAnimation { target: digitCard; property: "flipPhase"; from: 0.5; to: 1; duration: 200; easing.type: Easing.OutQuad }
+                ScriptAction { script: digitCard.shownDigit = digitCard.targetDigit }
+                PropertyAction { target: digitCard; property: "flipPhase"; value: 0 }
             }
 
-            // ── Static bottom half: shows OLD digit until midpoint, then NEW ──
             Item {
-                y: dCard.height / 2
-                width: dCard.width; height: dCard.height / 2
-                clip: true
-
+                y: digitCard.height / 2; width: digitCard.width; height: digitCard.height / 2; clip: true
                 Rectangle {
-                    width: dCard.width; height: dCard.height; y: -dCard.height / 2
-                    radius: dCard.cardRadius; color: dCard.cardBg
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: dCard.shownDigit
-                        color: themeManager.textColor
-                        font.pixelSize: dCard.fontSize; font.weight: Font.Bold; font.family: "monospace"
-                    }
+                    width: digitCard.width; height: digitCard.height; y: -digitCard.height / 2
+                    radius: digitCard.cardRadius; color: digitCard.cardBackground
+                    Text { anchors.centerIn: parent; text: digitCard.shownDigit; color: themeManager.textColor; font.pixelSize: digitCard.digitFontSize; font.weight: Font.Bold; font.family: "monospace"; renderType: Text.NativeRendering }
                 }
             }
-
-            // ── Static top half: shows NEW digit behind the falling flap ──
             Item {
-                y: 0; width: dCard.width; height: dCard.height / 2
-                clip: true
-
+                width: digitCard.width; height: digitCard.height / 2; clip: true
                 Rectangle {
-                    width: dCard.width; height: dCard.height
-                    radius: dCard.cardRadius; color: dCard.cardBg
-
-                    // Top-half depth gradient
-                    Rectangle {
-                        anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
-                        height: parent.height / 2
-                        gradient: Gradient {
-                            GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.06) }
-                            GradientStop { position: 1.0; color: "transparent" }
-                        }
-                    }
-
-                    Text {
-                        anchors.centerIn: parent
-                        // During animation show NEW digit (revealed behind flap); idle shows current
-                        text: dCard.isFlipping ? dCard.targetDigit : dCard.shownDigit
-                        color: themeManager.textColor
-                        font.pixelSize: dCard.fontSize; font.weight: Font.Bold; font.family: "monospace"
-                    }
+                    width: digitCard.width; height: digitCard.height
+                    radius: digitCard.cardRadius; color: digitCard.cardBackground
+                    Text { anchors.centerIn: parent; text: digitCard.isFlipping ? digitCard.targetDigit : digitCard.shownDigit; color: themeManager.textColor; font.pixelSize: digitCard.digitFontSize; font.weight: Font.Bold; font.family: "monospace"; renderType: Text.NativeRendering }
                 }
             }
-
-            // ── Animated top flap: OLD digit folds downward ──
             Item {
                 id: topFlap
-                y: 0; width: dCard.width; height: dCard.height / 2
-                clip: true
-                visible: dCard.isFlipping && dCard.flipPhase <= 0.5
-
-                transform: Scale {
-                    origin.x: topFlap.width / 2
-                    origin.y: topFlap.height  // pivot at bottom edge
-                    yScale: 1.0 - dCard.flipPhase * 2  // 1.0 → 0.0
-                }
-
+                width: digitCard.width; height: digitCard.height / 2; clip: true
+                visible: digitCard.isFlipping && digitCard.flipPhase <= 0.5
+                transform: Scale { origin.x: topFlap.width / 2; origin.y: topFlap.height; yScale: 1 - digitCard.flipPhase * 2 }
                 Rectangle {
-                    width: dCard.width; height: dCard.height
-                    radius: dCard.cardRadius; color: dCard.cardBg
-
-                    Rectangle {
-                        anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
-                        height: parent.height / 2
-                        gradient: Gradient {
-                            GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.06) }
-                            GradientStop { position: 1.0; color: "transparent" }
-                        }
-                    }
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: dCard.shownDigit  // still OLD digit during phase 1
-                        color: themeManager.textColor
-                        font.pixelSize: dCard.fontSize; font.weight: Font.Bold; font.family: "monospace"
-                    }
+                    width: digitCard.width; height: digitCard.height
+                    radius: digitCard.cardRadius; color: digitCard.cardBackground
+                    Text { anchors.centerIn: parent; text: digitCard.shownDigit; color: themeManager.textColor; font.pixelSize: digitCard.digitFontSize; font.weight: Font.Bold; font.family: "monospace"; renderType: Text.NativeRendering }
                 }
             }
-
-            // ── Animated bottom flap: NEW digit unfolds downward ──
             Item {
                 id: bottomFlap
-                y: dCard.height / 2; width: dCard.width; height: dCard.height / 2
-                clip: true
-                visible: dCard.flipPhase > 0.5 && dCard.flipPhase < 1.0
-
-                transform: Scale {
-                    origin.x: bottomFlap.width / 2
-                    origin.y: 0  // pivot at top edge
-                    yScale: (dCard.flipPhase - 0.5) * 2  // 0.0 → 1.0
-                }
-
+                y: digitCard.height / 2; width: digitCard.width; height: digitCard.height / 2; clip: true
+                visible: digitCard.flipPhase > 0.5 && digitCard.flipPhase < 1
+                transform: Scale { origin.x: bottomFlap.width / 2; origin.y: 0; yScale: (digitCard.flipPhase - 0.5) * 2 }
                 Rectangle {
-                    width: dCard.width; height: dCard.height; y: -dCard.height / 2
-                    radius: dCard.cardRadius; color: dCard.cardBg
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: dCard.targetDigit
-                        color: themeManager.textColor
-                        font.pixelSize: dCard.fontSize; font.weight: Font.Bold; font.family: "monospace"
-                    }
+                    width: digitCard.width; height: digitCard.height; y: -digitCard.height / 2
+                    radius: digitCard.cardRadius; color: digitCard.cardBackground
+                    Text { anchors.centerIn: parent; text: digitCard.targetDigit; color: themeManager.textColor; font.pixelSize: digitCard.digitFontSize; font.weight: Font.Bold; font.family: "monospace"; renderType: Text.NativeRendering }
                 }
             }
-
-            // ── Shadow on bottom half while top flap falls (depth cue) ──
-            Rectangle {
-                y: dCard.height / 2; width: dCard.width; height: dCard.height / 2
-                color: Qt.rgba(0, 0, 0, 0.12 * Math.max(0, 1.0 - dCard.flipPhase * 2))
-                visible: dCard.flipPhase > 0 && dCard.flipPhase <= 0.5
-                z: 5
-            }
-
-            // ── Split line ──
-            Rectangle {
-                anchors.left: parent.left; anchors.right: parent.right
-                anchors.leftMargin: 1; anchors.rightMargin: 1
-                y: dCard.height / 2 - 0.5; height: 1
-                color: Qt.rgba(0, 0, 0, 0.3); z: 10
-            }
-
-            // ── Border overlay ──
-            Rectangle {
-                anchors.fill: parent; radius: dCard.cardRadius
-                color: "transparent"; border.width: 1; border.color: dCard.cardBorder; z: 11
-            }
+            Rectangle { anchors.left: parent.left; anchors.right: parent.right; y: parent.height / 2 - 0.5; height: 1; color: Qt.rgba(0, 0, 0, 0.3); z: 10 }
+            Rectangle { anchors.fill: parent; radius: digitCard.cardRadius; color: "transparent"; border.width: 1; border.color: themeManager.borderColor; z: 11 }
         }
     }
 
-    // ─── Flip Colon Component ───
     Component {
         id: flipColon
-
         Item {
-            width: flipRoot.cardW * 0.35
-            height: flipRoot.cardH
+            width: parent.cardWidth * 0.35
+            height: parent.cardWidth / 0.6
+            Rectangle { anchors.horizontalCenter: parent.horizontalCenter; y: parent.height * 0.3 - height / 2; width: Math.max(3, parent.parent.cardWidth * 0.12); height: width; radius: width / 2; color: themeManager.textColor }
+            Rectangle { anchors.horizontalCenter: parent.horizontalCenter; y: parent.height * 0.7 - height / 2; width: Math.max(3, parent.parent.cardWidth * 0.12); height: width; radius: width / 2; color: themeManager.textColor }
+        }
+    }
 
-            Rectangle {
-                anchors.horizontalCenter: parent.horizontalCenter
-                y: parent.height * 0.3 - height / 2
-                width: Math.max(3, flipRoot.cardW * 0.12)
-                height: width
-                radius: width / 2
-                color: themeManager.textColor
-            }
-
-            Rectangle {
-                anchors.horizontalCenter: parent.horizontalCenter
-                y: parent.height * 0.7 - height / 2
-                width: Math.max(3, flipRoot.cardW * 0.12)
-                height: width
-                radius: width / 2
-                color: themeManager.textColor
-            }
+    ContentLayoutController {
+        id: contentLayout
+        tile: clockTile; canvas: contentCanvas; tileId: clockTile.tileId
+        settings: clockTile.settings; contentEditMode: clockTile.contentEditMode
+        selectedElement: clockTile.selectedElement; contentScale: clockTile.contentScale
+        elements: [
+            { id: "time", label: "Time", scale: 1, textScale: 1, visible: true, hasText: true },
+            { id: "seconds", label: "Seconds", scale: 1, textScale: 1, visible: true, hasText: true },
+            { id: "period", label: "AM / PM", scale: 1, textScale: 1, visible: true, hasText: true },
+            { id: "date", label: "Date", scale: 1, textScale: 1, visible: true, hasText: true },
+            { id: "day", label: "Day (Modern)", scale: 1, textScale: 1, visible: true, hasText: true }
+        ]
+        itemForId: function(elementId) {
+            if (elementId === "time") return timeItem
+            if (elementId === "seconds") return secondsItem
+            if (elementId === "period") return periodItem
+            if (elementId === "date") return dateItem
+            if (elementId === "day") return dayItem
+            return null
         }
     }
 }

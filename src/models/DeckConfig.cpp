@@ -285,6 +285,80 @@ void DeckConfig::moveTile(const QString &tileId, int col, int row) {
     }
 }
 
+bool DeckConfig::moveTileToPage(const QString &tileId, int targetPage) {
+    if (targetPage < 0 || targetPage >= pages_.size()) {
+        return false;
+    }
+
+    const int sourcePage = findTilePage(tileId);
+    if (sourcePage < 0) {
+        return false;
+    }
+    if (sourcePage == targetPage) {
+        return true;
+    }
+
+    int sourceIndex = -1;
+    for (int i = 0; i < pages_[sourcePage].tiles.size(); ++i) {
+        if (pages_[sourcePage].tiles[i].id == tileId) {
+            sourceIndex = i;
+            break;
+        }
+    }
+    if (sourceIndex < 0) {
+        return false;
+    }
+
+    TileData movedTile = pages_[sourcePage].tiles[sourceIndex];
+    const auto positionIsFree = [this, targetPage, &movedTile](int col, int row) {
+        if (col < 0 || row < 0 ||
+            col + movedTile.colSpan > gridColumns_ ||
+            row + movedTile.rowSpan > gridRows_) {
+            return false;
+        }
+
+        for (const auto &tile : pages_[targetPage].tiles) {
+            const bool overlaps = !(col + movedTile.colSpan <= tile.col ||
+                                    tile.col + tile.colSpan <= col ||
+                                    row + movedTile.rowSpan <= tile.row ||
+                                    tile.row + tile.rowSpan <= row);
+            if (overlaps) {
+                return false;
+            }
+        }
+        return true;
+    };
+
+    int destinationCol = -1;
+    int destinationRow = -1;
+    if (positionIsFree(movedTile.col, movedTile.row)) {
+        destinationCol = movedTile.col;
+        destinationRow = movedTile.row;
+    } else {
+        for (int row = 0; row <= gridRows_ - movedTile.rowSpan && destinationCol < 0; ++row) {
+            for (int col = 0; col <= gridColumns_ - movedTile.colSpan; ++col) {
+                if (positionIsFree(col, row)) {
+                    destinationCol = col;
+                    destinationRow = row;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (destinationCol < 0) {
+        return false;
+    }
+
+    movedTile.col = destinationCol;
+    movedTile.row = destinationRow;
+    pages_[sourcePage].tiles.removeAt(sourceIndex);
+    pages_[targetPage].tiles.append(movedTile);
+    emit tilesChanged();
+    save();
+    return true;
+}
+
 void DeckConfig::resizeTile(const QString &tileId, int colSpan, int rowSpan) {
     for (auto &page : pages_) {
         for (auto &tile : page.tiles) {

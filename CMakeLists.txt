@@ -9,9 +9,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Qml Quick DBus Widgets)
-find_package(Qt6 6.5 OPTIONAL_COMPONENTS Multimedia)
-find_package(Qt5Compat 6.5 QUIET COMPONENTS GraphicalEffects)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Core5Compat Gui Qml Quick DBus Sql Widgets)
 
 # Layer-shell-qt for Wayland no-focus-steal
 find_package(LayerShellQt QUIET)
@@ -104,19 +102,14 @@ target_compile_definitions(ciderdeck PRIVATE
 
 target_link_libraries(ciderdeck PRIVATE
   Qt6::Core
+  Qt6::Core5Compat
   Qt6::Gui
   Qt6::Qml
   Qt6::Quick
   Qt6::DBus
+  Qt6::Sql
   Qt6::Widgets
 )
-
-# Qt5Compat for GraphicalEffects (DropShadow, etc.)
-if(TARGET Qt6::Qt5Compat)
-  target_link_libraries(ciderdeck PRIVATE Qt6::Qt5Compat)
-elseif(TARGET Qt5Compat::GraphicalEffects)
-  target_link_libraries(ciderdeck PRIVATE Qt5Compat::GraphicalEffects)
-endif()
 
 if(LayerShellQt_FOUND)
   target_link_libraries(ciderdeck PRIVATE LayerShellQt::Interface)
@@ -140,10 +133,6 @@ if(KF6PulseAudioQt_FOUND)
   message(STATUS "KF6PulseAudioQt found: audio control enabled")
 endif()
 
-if(Qt6Multimedia_FOUND)
-  target_link_libraries(ciderdeck PRIVATE Qt6::Multimedia)
-endif()
-
 if(DDCUTIL_LIBRARY AND DDCUTIL_INCLUDE_DIR)
   target_link_libraries(ciderdeck PRIVATE ${DDCUTIL_LIBRARY})
   target_include_directories(ciderdeck PRIVATE ${DDCUTIL_INCLUDE_DIR})
@@ -161,3 +150,71 @@ install(FILES kwin-scripts/ciderdeck-bridge.js
         DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/ciderdeck/kwin-scripts")
 install(FILES data/icons/ciderdeck.svg
         DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/scalable/apps")
+
+include(CTest)
+if(BUILD_TESTING)
+  find_package(Qt6 6.5 REQUIRED COMPONENTS Test)
+
+  add_executable(ciderdeck-model-tests
+    tests/ModelTests.cpp
+    src/models/DeckConfig.h
+    src/models/DeckConfig.cpp
+    src/models/TileData.h
+    src/models/TileType.h
+    src/viewmodels/TileGridModel.h
+    src/viewmodels/TileGridModel.cpp
+  )
+  target_include_directories(ciderdeck-model-tests PRIVATE src)
+  target_link_libraries(ciderdeck-model-tests PRIVATE Qt6::Core Qt6::Test)
+
+  add_test(NAME ciderdeck-model-tests COMMAND ciderdeck-model-tests)
+
+  add_executable(ciderdeck-clipboard-tests
+    tests/ClipboardServiceTests.cpp
+    src/services/ClipboardService.h
+    src/services/ClipboardService.cpp
+  )
+  target_include_directories(ciderdeck-clipboard-tests PRIVATE src)
+  target_link_libraries(ciderdeck-clipboard-tests PRIVATE
+    Qt6::Core
+    Qt6::DBus
+    Qt6::Gui
+    Qt6::Sql
+    Qt6::Test
+    Qt6::Widgets
+  )
+
+  add_test(NAME ciderdeck-clipboard-tests COMMAND ciderdeck-clipboard-tests)
+  set_tests_properties(ciderdeck-clipboard-tests PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+  )
+
+  add_executable(ciderdeck-service-settings-tests
+    tests/ServiceSettingsTests.cpp
+    src/services/MprisManager.h
+    src/services/MprisManager.cpp
+    src/services/TimerService.h
+    src/services/TimerService.cpp
+  )
+  target_include_directories(ciderdeck-service-settings-tests PRIVATE src)
+  target_link_libraries(ciderdeck-service-settings-tests PRIVATE
+    Qt6::Core
+    Qt6::DBus
+    Qt6::Test
+  )
+  add_test(NAME ciderdeck-service-settings-tests COMMAND ciderdeck-service-settings-tests)
+
+  find_program(QMLLINT_EXECUTABLE NAMES qmllint)
+  if(QMLLINT_EXECUTABLE)
+    file(GLOB CIDERDECK_QML_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/qml/*.qml")
+    add_test(NAME ciderdeck-qml-lint
+      COMMAND "${QMLLINT_EXECUTABLE}" -I "${CMAKE_CURRENT_SOURCE_DIR}/src/qml" ${CIDERDECK_QML_FILES}
+    )
+  endif()
+
+  add_test(NAME ciderdeck-tile-scale-contract
+    COMMAND "${CMAKE_COMMAND}"
+      "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+      -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/VerifyTileContentScale.cmake"
+  )
+endif()

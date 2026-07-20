@@ -327,6 +327,69 @@ bool KWinDBusClient::moveWindowToScreen(const QString &windowId, const QString &
     return sendCommand(QStringLiteral("ciderdeckMoveToScreen"), {windowId, screenName});
 }
 
+bool KWinDBusClient::invokeKWinShortcut(const QString &shortcutName) {
+    QDBusInterface component(
+        QStringLiteral("org.kde.kglobalaccel"),
+        QStringLiteral("/component/kwin"),
+        QStringLiteral("org.kde.kglobalaccel.Component"),
+        QDBusConnection::sessionBus());
+
+    if (!component.isValid()) {
+        emit bridgeError(QStringLiteral("KDE shortcut service unavailable"));
+        return false;
+    }
+
+    const QDBusMessage result = component.call(
+        QStringLiteral("invokeShortcut"), shortcutName);
+    if (result.type() == QDBusMessage::ErrorMessage) {
+        emit bridgeError(QStringLiteral("Failed to invoke KDE action '%1': %2")
+                         .arg(shortcutName, result.errorMessage()));
+        return false;
+    }
+    return true;
+}
+
+bool KWinDBusClient::toggleShowDesktop() {
+    auto bus = QDBusConnection::sessionBus();
+    QDBusInterface kwin(
+        QStringLiteral("org.kde.KWin"),
+        QStringLiteral("/KWin"),
+        QStringLiteral("org.kde.KWin"),
+        bus);
+    if (!kwin.isValid()) {
+        emit bridgeError(QStringLiteral("KWin D-Bus interface unavailable"));
+        return false;
+    }
+
+    const QVariant showingDesktop = kwin.property("showingDesktop");
+    if (!showingDesktop.isValid()) {
+        emit bridgeError(QStringLiteral("Failed to read KWin desktop state"));
+        return false;
+    }
+
+    // Plasma's registered action reliably enters Peek at Desktop. On this
+    // setup, leaving it is more reliable through KWin's explicit false state.
+    if (showingDesktop.toBool()) {
+        QDBusMessage message = QDBusMessage::createMethodCall(
+            QStringLiteral("org.kde.KWin"),
+            QStringLiteral("/KWin"),
+            QStringLiteral("org.kde.KWin"),
+            QStringLiteral("showDesktop"));
+        message << false;
+        if (!bus.send(message)) {
+            emit bridgeError(QStringLiteral("Failed to restore windows after Show Desktop"));
+            return false;
+        }
+        return true;
+    }
+
+    return invokeKWinShortcut(QStringLiteral("Show Desktop"));
+}
+
+bool KWinDBusClient::toggleOverview() {
+    return invokeKWinShortcut(QStringLiteral("Overview"));
+}
+
 bool KWinDBusClient::isAppRunning(const QString &resourceClass) const {
     return !findWindowByClass(resourceClass).isEmpty();
 }

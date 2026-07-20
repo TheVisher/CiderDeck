@@ -3,10 +3,13 @@ import QtQuick
 Card {
     id: mixerTile
 
+    property string tileId: parent ? parent.tileId : ""
     property string sizeClass: parent ? parent.sizeClass : "small"
     property var settings: parent ? parent.settings : ({})
+    property bool contentEditMode: parent ? parent.contentEditMode : false
+    property string selectedElement: parent ? parent.selectedContentElement : ""
     readonly property real contentScale: parent ? (parent.contentScale || 1) : 1
-    readonly property real railScale: Math.max(0.9, Math.min(1.35, contentScale))
+    readonly property real railScale: contentScale
 
     readonly property int primaryGroupIdx: settings.primaryGroup || 0
     readonly property var groupList: audioMixerService ? audioMixerService.groups : []
@@ -73,6 +76,11 @@ Card {
                       ? "qrc:/icons/lucide/volume-1.svg"
                       : "qrc:/icons/lucide/volume-2.svg"
         contentScale: mixerTile.railScale
+        tileHost: mixerTile
+        tileId: mixerTile.tileId
+        tileSettings: mixerTile.settings
+        contentEditMode: mixerTile.contentEditMode
+        selectedElement: mixerTile.selectedElement
         onValueRequested: (value) => mixerTile.setVolume(value)
         onIconClicked: mixerTile.toggleMute()
     }
@@ -86,6 +94,7 @@ Card {
         iconSize: 15
         source: "qrc:/icons/lucide/sliders-horizontal.svg"
         iconColor: themeManager.secondaryTextColor
+        enabled: !mixerTile.contentEditMode
         onClicked: mixerOverlay.open(mixerTile.settings)
     }
 }

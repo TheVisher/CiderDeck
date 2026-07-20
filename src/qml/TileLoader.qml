@@ -39,8 +39,10 @@ Item {
     // Content scale factor: per-tile override if set, otherwise global text scale
     readonly property real contentScaleValue: {
         var s = tileSettingsValue ? tileSettingsValue.contentScale : undefined
-        if (s !== undefined && s > 0) return s
-        return deckConfig.globalTextScale > 0 ? deckConfig.globalTextScale : 1.0
+        var requested = s !== undefined && s > 0
+                      ? s
+                      : (deckConfig.globalTextScale > 0 ? deckConfig.globalTextScale : 1.0)
+        return Math.max(0.5, Math.min(3.0, requested))
     }
 
     // Size class for adaptive tiles — used by tiles that need layout breakpoints.
@@ -102,17 +104,23 @@ Item {
         property real tileHeight: tileLoader.height
         property real cardOpacity: tileLoader.effectiveOpacity
         property real contentScale: tileLoader.contentScaleValue
+        property bool contentEditMode: root.contentEditTileId === tileLoader.tileIdValue
+        property string selectedContentElement: root.contentEditElement
     }
 
     // Edit overlay
     EditOverlay {
         anchors.fill: parent
-        editMode: editController.editing
+        editMode: editController.editing && root.contentEditTileId === ""
         tileId: tileLoader.tileIdValue
         colValue: tileLoader.colValue
         rowValue: tileLoader.rowValue
         colSpanValue: tileLoader.colSpanValue
         rowSpanValue: tileLoader.rowSpanValue
+        cellWidth: tileLoader.cellWidth
+        cellHeight: tileLoader.cellHeight
+        gridGap: tileLoader.gridGap
+        gridPadding: tileLoader.gridPadding
     }
 
     // Tile type components

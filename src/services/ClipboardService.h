@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QAbstractListModel>
+#include <QUrl>
 
 namespace ciderdeck {
 
@@ -13,7 +14,10 @@ public:
     enum Roles {
         TextRole = Qt::UserRole + 1,
         TimestampRole,
+        TimestampEpochRole,
         IsImageRole,
+        EntryIdRole,
+        ImageSourceRole,
     };
 
     explicit ClipboardService(QObject *parent = nullptr);
@@ -32,17 +36,25 @@ signals:
     void historyChanged();
 
 private slots:
-    void onClipboardChanged();
+    void scheduleRefresh();
 
 private:
+    void refresh();
+
     struct Entry {
+        QString uuid;
         QString text;
         QString timestamp;
+        qint64 timestampEpoch = 0;
         bool isImage = false;
+        QUrl imageSource;
     };
 
+    QString databasePath_;
+    QString dataRoot_;
     QList<Entry> history_;
     int maxEntries_ = 20;
+    bool refreshPending_ = false;
 };
 
 } // namespace ciderdeck

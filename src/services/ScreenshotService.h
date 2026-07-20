@@ -10,15 +10,10 @@ class ScreenshotService : public QObject {
 public:
     explicit ScreenshotService(QObject *parent = nullptr);
 
-    Q_INVOKABLE void captureScreen(const QString &monitor = QString());
-    Q_INVOKABLE void captureRegion();
+    Q_INVOKABLE bool triggerShortcut();
 
 signals:
-    void screenshotSaved(const QString &path);
     void screenshotFailed(const QString &error);
-
-private:
-    QString savePath() const;
 };
 
 } // namespace ciderdeck

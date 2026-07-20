@@ -30,11 +30,18 @@ Rectangle {
         NumberAnimation { duration: 250; easing.type: Easing.OutCubic }
     }
 
+    function moveForContentEdit(active) {
+        xBehavior.enabled = true
+        x = active ? 16 : parent.width - width - 16
+    }
+
     onIsOpenChanged: {
         if (isOpen) {
             x = parent.width - width - 16
         } else {
             x = parent.width + 16
+            if (root.contentEditTileId === settingsPanel.editingTileId)
+                root.endContentEdit()
         }
     }
 
@@ -141,18 +148,21 @@ Rectangle {
     }
 
     function openGeneral() {
+        root.clearContentValidators()
         mode = "general"
         editingTileId = ""
         isOpen = true
     }
 
     function openTile(tileId) {
+        root.clearContentValidators()
         mode = "tile"
         editingTileId = tileId
         isOpen = true
     }
 
     function close() {
+        root.clearContentValidators()
         isOpen = false
     }
 }

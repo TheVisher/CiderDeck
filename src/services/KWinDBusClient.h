@@ -31,6 +31,8 @@ public:
     Q_INVOKABLE QString findWindowBest(const QString &wmClass, const QString &desktopName) const;
 
 public slots:
+    bool toggleShowDesktop();
+    bool toggleOverview();
     void pushWindows(const QString &jsonPayload);
     void pushDebug(const QString &message);
 
@@ -40,6 +42,7 @@ signals:
     void bridgeError(const QString &message);
 
 private:
+    bool invokeKWinShortcut(const QString &shortcutName);
     bool startWindowMonitor();
     void stopWindowMonitor();
 

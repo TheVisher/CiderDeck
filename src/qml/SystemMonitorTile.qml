@@ -326,6 +326,7 @@ Card {
                         height: 4
                         radius: 2
                         color: themeManager.borderColor
+                        visible: sysmonTile.showBar
 
                         Rectangle {
                             width: parent.width * Math.max(0, Math.min(1, modelData.percent / 100))

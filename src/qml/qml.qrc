@@ -17,6 +17,10 @@
         <file>MediaPlayerTile.qml</file>
         <file>VolumeTile.qml</file>
         <file>WeatherTile.qml</file>
+        <file>WeatherEditableFrame.qml</file>
+        <file>ContentLayoutController.qml</file>
+        <file>ContentEditableFrame.qml</file>
+        <file>ContentEditorSettings.qml</file>
         <file>SystemMonitorTile.qml</file>
         <file>MetricSparkline.qml</file>
         <file>ProcessManagerTile.qml</file>

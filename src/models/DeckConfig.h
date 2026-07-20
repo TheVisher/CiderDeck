@@ -101,6 +101,7 @@ public:
     Q_INVOKABLE void removeTile(const QString &tileId);
     Q_INVOKABLE void updateTile(const QString &tileId, const QVariantMap &changes);
     Q_INVOKABLE void moveTile(const QString &tileId, int col, int row);
+    Q_INVOKABLE bool moveTileToPage(const QString &tileId, int targetPage);
     Q_INVOKABLE void resizeTile(const QString &tileId, int colSpan, int rowSpan);
 
     const QList<PageData> &pages() const { return pages_; }

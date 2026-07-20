@@ -24,6 +24,44 @@ Window {
     readonly property real cellWidth: (width - gridPadding * 2 - gridGap * (gridColumns - 1)) / gridColumns
     readonly property real cellHeight: (height - gridPadding * 2 - gridGap * (gridRows - 1)) / gridRows
 
+    // Transient state for editing the contents inside a tile. Persisted item
+    // positions and scales live in that tile's settings map.
+    property string contentEditTileId: ""
+    property string contentEditElement: ""
+    property var contentScaleValidator: null
+    property var contentItemValueValidator: null
+    property string contentValidatorOwner: ""
+    property string contentEditConstraint: ""
+
+    function beginContentEdit(tileId, initialElement) {
+        editController.exitEditMode()
+        contentEditTileId = tileId
+        contentEditElement = initialElement || "temperature"
+        contentEditConstraint = ""
+        // Weather lives on the right side in the default deck. Put its controls
+        // on the opposite side while editing so the tile remains visible.
+        if (settingsPanel.isOpen)
+            settingsPanel.moveForContentEdit(true)
+    }
+
+    function endContentEdit() {
+        contentEditTileId = ""
+        contentEditElement = ""
+        contentScaleValidator = null
+        contentItemValueValidator = null
+        contentValidatorOwner = ""
+        contentEditConstraint = ""
+        if (settingsPanel.isOpen)
+            settingsPanel.moveForContentEdit(false)
+    }
+
+    function clearContentValidators(owner) {
+        if (owner && contentValidatorOwner !== owner) return
+        contentScaleValidator = null
+        contentItemValueValidator = null
+        contentValidatorOwner = ""
+    }
+
     // Background touch area for context menu and edit mode exit
     MouseArea {
         id: backgroundArea
@@ -44,12 +82,21 @@ Window {
             editController.enterEditMode()
         }
 
-        Keys.onEscapePressed: {
-            if (settingsPanel.isOpen) {
+    }
+
+    // A window-level shortcut works regardless of which tile or settings control
+    // currently owns QML focus.
+    Shortcut {
+        sequence: "Esc"
+        enabled: root.contentEditTileId !== "" || settingsPanel.isOpen || editController.editing
+        context: Qt.WindowShortcut
+        onActivated: {
+            if (root.contentEditTileId !== "")
+                root.endContentEdit()
+            else if (settingsPanel.isOpen)
                 settingsPanel.close()
-            } else if (editController.editing) {
+            else
                 editController.exitEditMode()
-            }
         }
     }
 
