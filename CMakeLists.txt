@@ -195,6 +195,8 @@ if(BUILD_TESTING)
     src/services/MprisManager.cpp
     src/services/TimerService.h
     src/services/TimerService.cpp
+    src/services/UpdateService.h
+    src/services/UpdateService.cpp
   )
   target_include_directories(ciderdeck-service-settings-tests PRIVATE src)
   target_link_libraries(ciderdeck-service-settings-tests PRIVATE

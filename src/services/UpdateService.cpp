@@ -2,8 +2,18 @@
 
 #include <QDateTime>
 #include <QProcess>
+#include <QRegularExpression>
+#include <QSocketNotifier>
 #include <QStandardPaths>
 #include <QTimer>
+
+#include <cerrno>
+#include <csignal>
+#include <fcntl.h>
+#include <pty.h>
+#include <sys/ioctl.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 namespace ciderdeck {
 
@@ -14,9 +24,11 @@ UpdateService::UpdateService(QObject *parent)
     , flatpakProcess_(new QProcess(this))
     , updateProcess_(new QProcess(this))
     , refreshTimer_(new QTimer(this))
-    , timeoutTimer_(new QTimer(this)) {
+    , timeoutTimer_(new QTimer(this))
+    , terminalPollTimer_(new QTimer(this)) {
     refreshTimer_->setInterval(30 * 60 * 1000);
     timeoutTimer_->setSingleShot(true);
+    terminalPollTimer_->setInterval(100);
 
     connect(refreshTimer_, &QTimer::timeout, this, &UpdateService::refresh);
     connect(timeoutTimer_, &QTimer::timeout, this, [this]() {
@@ -47,6 +59,10 @@ UpdateService::UpdateService(QObject *parent)
     connectProcess(aurProcess_, Source::Aur);
     connectProcess(flatpakProcess_, Source::Flatpak);
 
+    connect(terminalPollTimer_, &QTimer::timeout,
+            this, &UpdateService::pollTerminalProcess);
+
+    // Konsole remains a fallback when a PTY cannot be created.
     connect(updateProcess_, &QProcess::started, this, &UpdateService::updated);
     connect(updateProcess_, &QProcess::finished, this, [this]() {
         emit updated();
@@ -63,8 +79,18 @@ UpdateService::UpdateService(QObject *parent)
     refreshTimer_->start();
 }
 
+UpdateService::~UpdateService() {
+    if (terminalPid_ > 0) {
+        ::kill(-static_cast<pid_t>(terminalPid_), SIGKILL);
+        ::kill(static_cast<pid_t>(terminalPid_), SIGKILL);
+        int status = 0;
+        ::waitpid(static_cast<pid_t>(terminalPid_), &status, 0);
+    }
+    closeTerminalDescriptor();
+}
+
 bool UpdateService::updateRunning() const {
-    return updateProcess_->state() != QProcess::NotRunning;
+    return terminalActive_ || updateProcess_->state() != QProcess::NotRunning;
 }
 
 QStringList UpdateService::allUpdates() const {
@@ -98,41 +124,269 @@ void UpdateService::updateAll() {
     if (updateRunning())
         return;
 
-    const QString konsole = QStandardPaths::findExecutable(QStringLiteral("konsole"));
-    if (konsole.isEmpty()) {
-        errors_.append(QStringLiteral("Konsole is not installed"));
-        emit updated();
-        return;
-    }
+    errors_.clear();
+    const QString command = updateCommand();
+    if (!startEmbeddedUpdate(command))
+        startExternalUpdate(command);
+}
 
-    const QString script = QStringLiteral(R"SCRIPT(
+QString UpdateService::updateCommand() const {
+    return QStringLiteral(R"SCRIPT(
 clear
 printf '\n\033[1;36mCiderDeck System Update\033[0m\n\n'
 arch_status=0
 flatpak_status=0
 
 printf '\033[1mArch repositories and AUR\033[0m\n'
-paru -Syu || arch_status=$?
+if command -v paru >/dev/null 2>&1; then
+    paru -Syu || arch_status=$?
+else
+    printf '\033[1;31mparu is not installed.\033[0m\n'
+    arch_status=127
+fi
 
 printf '\n\033[1mFlatpak\033[0m\n'
-flatpak update || flatpak_status=$?
+if command -v flatpak >/dev/null 2>&1; then
+    flatpak update || flatpak_status=$?
+else
+    printf 'Flatpak is not installed; skipping.\n'
+fi
 
 printf '\n'
 if [ "$arch_status" -eq 0 ] && [ "$flatpak_status" -eq 0 ]; then
     printf '\033[1;32mAll updates completed.\033[0m\n'
+    overall_status=0
 else
     printf '\033[1;31mOne or more update steps did not complete.\033[0m\n'
+    overall_status=1
 fi
-printf '\nPress Enter to close...'
-read -r
+printf '\nPress Enter to return to CiderDeck...'
+IFS= read -r _
+exit "$overall_status"
 )SCRIPT");
+}
+
+bool UpdateService::startEmbeddedUpdate(const QString &command) {
+    struct winsize size {};
+    size.ws_col = static_cast<unsigned short>(terminalColumns_);
+    size.ws_row = static_cast<unsigned short>(terminalRows_);
+
+    const QByteArray commandBytes = command.toUtf8();
+    int masterFd = -1;
+    const pid_t pid = ::forkpty(&masterFd, nullptr, nullptr, &size);
+    if (pid < 0)
+        return false;
+
+    if (pid == 0) {
+        ::execl("/usr/bin/env", "env", "TERM=xterm-256color",
+                "/bin/bash", "-c", commandBytes.constData(),
+                static_cast<char *>(nullptr));
+        ::_exit(127);
+    }
+
+    const int currentFlags = ::fcntl(masterFd, F_GETFL, 0);
+    if (currentFlags >= 0)
+        ::fcntl(masterFd, F_SETFL, currentFlags | O_NONBLOCK);
+
+    terminalFd_ = masterFd;
+    terminalPid_ = pid;
+    terminalActive_ = true;
+    updateCanceled_ = false;
+    terminalRawOutput_.clear();
+    terminalOutput_ = QStringLiteral("Starting update session...\n");
+
+    terminalNotifier_ = new QSocketNotifier(terminalFd_, QSocketNotifier::Read, this);
+    connect(terminalNotifier_, &QSocketNotifier::activated,
+            this, &UpdateService::readTerminalOutput);
+    terminalPollTimer_->start();
+    emit terminalOutputChanged();
+    emit updated();
+    return true;
+}
+
+void UpdateService::startExternalUpdate(const QString &command) {
+    const QString konsole = QStandardPaths::findExecutable(QStringLiteral("konsole"));
+    if (konsole.isEmpty()) {
+        errors_.append(QStringLiteral("Could not create an embedded terminal, and Konsole is not installed"));
+        emit updated();
+        return;
+    }
 
     updateProcess_->setProgram(konsole);
     updateProcess_->setArguments({QStringLiteral("--separate"),
                                   QStringLiteral("-p"), QStringLiteral("tabtitle=CiderDeck Updates"),
                                   QStringLiteral("-e"), QStringLiteral("bash"),
-                                  QStringLiteral("-lc"), script});
+                                  QStringLiteral("-lc"), command});
     updateProcess_->start();
+}
+
+void UpdateService::sendTerminalInput(const QString &input) {
+    if (!terminalActive_ || terminalFd_ < 0 || input.isEmpty())
+        return;
+
+    const QByteArray bytes = input.toUtf8();
+    qsizetype written = 0;
+    while (written < bytes.size()) {
+        const ssize_t count = ::write(terminalFd_, bytes.constData() + written,
+                                      static_cast<size_t>(bytes.size() - written));
+        if (count > 0) {
+            written += count;
+            continue;
+        }
+        if (count < 0 && errno == EINTR)
+            continue;
+        break;
+    }
+}
+
+void UpdateService::cancelUpdate() {
+    if (!terminalActive_ || terminalPid_ <= 0)
+        return;
+    updateCanceled_ = true;
+    ::kill(-static_cast<pid_t>(terminalPid_), SIGTERM);
+    ::kill(static_cast<pid_t>(terminalPid_), SIGTERM);
+    QTimer::singleShot(1500, this, [this]() {
+        if (terminalPid_ > 0) {
+            ::kill(-static_cast<pid_t>(terminalPid_), SIGKILL);
+            ::kill(static_cast<pid_t>(terminalPid_), SIGKILL);
+        }
+    });
+}
+
+void UpdateService::setTerminalSize(int columns, int rows) {
+    terminalColumns_ = qBound(40, columns, 240);
+    terminalRows_ = qBound(8, rows, 80);
+    if (terminalFd_ < 0)
+        return;
+
+    struct winsize size {};
+    size.ws_col = static_cast<unsigned short>(terminalColumns_);
+    size.ws_row = static_cast<unsigned short>(terminalRows_);
+    ::ioctl(terminalFd_, TIOCSWINSZ, &size);
+}
+
+void UpdateService::readTerminalOutput() {
+    if (terminalFd_ < 0)
+        return;
+
+    char buffer[8192];
+    bool received = false;
+    while (true) {
+        const ssize_t count = ::read(terminalFd_, buffer, sizeof(buffer));
+        if (count > 0) {
+            terminalRawOutput_.append(buffer, static_cast<qsizetype>(count));
+            received = true;
+            continue;
+        }
+        if (count < 0 && errno == EINTR)
+            continue;
+        break;
+    }
+
+    if (!received)
+        return;
+
+    constexpr qsizetype maximumRawOutput = 512 * 1024;
+    constexpr qsizetype retainedRawOutput = 384 * 1024;
+    if (terminalRawOutput_.size() > maximumRawOutput) {
+        qsizetype firstLine = terminalRawOutput_.indexOf(
+            '\n', terminalRawOutput_.size() - retainedRawOutput);
+        if (firstLine < 0)
+            firstLine = terminalRawOutput_.size() - retainedRawOutput;
+        terminalRawOutput_.remove(0, firstLine + 1);
+    }
+
+    terminalOutput_ = sanitizeTerminalOutput(terminalRawOutput_);
+    emit terminalOutputChanged();
+}
+
+void UpdateService::pollTerminalProcess() {
+    if (terminalPid_ <= 0)
+        return;
+
+    int status = 0;
+    const pid_t result = ::waitpid(static_cast<pid_t>(terminalPid_), &status, WNOHANG);
+    if (result == 0)
+        return;
+    if (result < 0 && errno == EINTR)
+        return;
+
+    readTerminalOutput();
+    finishTerminalProcess(result < 0 ? -1 : status);
+}
+
+void UpdateService::finishTerminalProcess(int status) {
+    terminalPollTimer_->stop();
+    const bool canceled = updateCanceled_;
+    const bool succeeded = status >= 0 && WIFEXITED(status) && WEXITSTATUS(status) == 0;
+
+    terminalPid_ = -1;
+    terminalActive_ = false;
+    updateCanceled_ = false;
+    closeTerminalDescriptor();
+
+    if (canceled)
+        errors_.append(QStringLiteral("Update canceled"));
+    else if (!succeeded)
+        errors_.append(QStringLiteral("One or more update steps did not complete"));
+
+    emit updated();
+    QTimer::singleShot(600, this, &UpdateService::refresh);
+}
+
+void UpdateService::closeTerminalDescriptor() {
+    if (terminalNotifier_) {
+        terminalNotifier_->setEnabled(false);
+        terminalNotifier_->deleteLater();
+        terminalNotifier_ = nullptr;
+    }
+    if (terminalFd_ >= 0) {
+        ::close(terminalFd_);
+        terminalFd_ = -1;
+    }
+}
+
+QString UpdateService::sanitizeTerminalOutput(const QByteArray &output) {
+    QString text = QString::fromUtf8(output);
+
+    static const QRegularExpression oscSequence(
+        QStringLiteral("\\x1b\\][^\\x07]*(?:\\x07|\\x1b\\\\)"));
+    static const QRegularExpression csiSequence(
+        QStringLiteral("\\x1b\\[[0-?]*[ -/]*[@-~]"));
+    static const QRegularExpression shortEscape(
+        QStringLiteral("\\x1b[()][0-2A-Z]|\\x1b[@-_]"));
+    text.remove(oscSequence);
+    text.remove(csiSequence);
+    text.remove(shortEscape);
+
+    QString rendered;
+    rendered.reserve(text.size());
+    qsizetype lineStart = 0;
+    for (qsizetype index = 0; index < text.size(); ++index) {
+        const QChar character = text.at(index);
+        if (character == u'\r') {
+            // PTYs normally translate a newline to CRLF. The CR in that pair
+            // is not an in-place progress update and must not erase the line
+            // that was just rendered.
+            if (index + 1 < text.size() && text.at(index + 1) == u'\n')
+                continue;
+            rendered.truncate(lineStart);
+            continue;
+        }
+        if (character == u'\n') {
+            rendered.append(character);
+            lineStart = rendered.size();
+            continue;
+        }
+        if (character == u'\b') {
+            if (rendered.size() > lineStart)
+                rendered.chop(1);
+            continue;
+        }
+        if (character.unicode() >= 0x20 || character == u'\t')
+            rendered.append(character);
+    }
+    return rendered;
 }
 
 void UpdateService::startCheck(Source source, const QString &program, const QStringList &arguments) {

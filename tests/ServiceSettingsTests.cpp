@@ -2,6 +2,7 @@
 
 #include "services/MprisManager.h"
 #include "services/TimerService.h"
+#include "services/UpdateService.h"
 
 using namespace ciderdeck;
 
@@ -12,6 +13,7 @@ private slots:
     void timerDefaultDurationIsApplied();
     void preferredMediaPlayerIsResolved();
     void mediaDurationSurvivesIncompleteMetadataRefresh();
+    void terminalOutputIsMadeReadable();
 };
 
 void ServiceSettingsTests::timerDefaultDurationIsApplied()
@@ -60,6 +62,15 @@ void ServiceSettingsTests::mediaDurationSurvivesIncompleteMetadataRefresh()
 
     complete[QStringLiteral("xesam:title")] = QStringLiteral("Second");
     QCOMPARE(MprisManager::resolveDuration(complete, identity, 180000000LL), 0LL);
+}
+
+void ServiceSettingsTests::terminalOutputIsMadeReadable()
+{
+    const QByteArray output = "\x1b[1;36mUpdate\x1b[0m\r\n"
+                              "Downloading 10%\rDownloading 20%\n"
+                              "abc\b\bde\n";
+    QCOMPARE(UpdateService::sanitizeTerminalOutput(output),
+             QStringLiteral("Update\nDownloading 20%\nade\n"));
 }
 
 QTEST_GUILESS_MAIN(ServiceSettingsTests)

@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Layouts
 
 Card {
@@ -21,8 +22,10 @@ Card {
     }
 
     Item {
+        id: normalContent
         anchors.fill: parent
         anchors.margins: 14
+        visible: !updateService.terminalActive
 
         ColumnLayout {
             anchors.fill: parent
@@ -245,6 +248,178 @@ Card {
                 text: updateService.hasChecked ? "Checked " + updateService.lastChecked : "Not checked yet"
                 color: themeManager.secondaryTextColor
                 font.pixelSize: 9 * updatesTile.contentScale
+            }
+        }
+    }
+
+    FocusScope {
+        id: terminalView
+        anchors.fill: parent
+        anchors.margins: 8
+        visible: updateService.terminalActive
+        focus: visible
+
+        TapHandler {
+            onTapped: terminalView.forceActiveFocus()
+        }
+
+        function updateTerminalSize() {
+            updateService.setTerminalSize(
+                Math.max(40, Math.floor(terminalViewport.width / (7.2 * updatesTile.contentScale))),
+                Math.max(8, Math.floor(terminalViewport.height / (15 * updatesTile.contentScale))))
+        }
+
+        function scrollToBottom() {
+            terminalScroll.contentY = Math.max(
+                0, terminalScroll.contentHeight - terminalScroll.height)
+        }
+
+        onVisibleChanged: {
+            if (visible) {
+                forceActiveFocus()
+                updateTerminalSize()
+                Qt.callLater(scrollToBottom)
+            }
+        }
+
+        Keys.onPressed: (event) => {
+            var input = ""
+            var control = (event.modifiers & Qt.ControlModifier) !== 0
+            if (control && event.key === Qt.Key_C) input = "\x03"
+            else if (control && event.key === Qt.Key_D) input = "\x04"
+            else if (control && event.key === Qt.Key_Z) input = "\x1a"
+            else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) input = "\n"
+            else if (event.key === Qt.Key_Backspace) input = "\x7f"
+            else if (event.key === Qt.Key_Tab) input = "\t"
+            else if (event.key === Qt.Key_Escape) input = "\x1b"
+            else if (event.key === Qt.Key_Up) input = "\x1b[A"
+            else if (event.key === Qt.Key_Down) input = "\x1b[B"
+            else if (event.key === Qt.Key_Right) input = "\x1b[C"
+            else if (event.key === Qt.Key_Left) input = "\x1b[D"
+            else if (!control && event.text !== "") input = event.text
+
+            if (input !== "") {
+                updateService.sendTerminalInput(input)
+                event.accepted = true
+            }
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            radius: 6
+            color: Qt.rgba(0.015, 0.022, 0.032, 0.96)
+            border.width: 1
+            border.color: Qt.rgba(themeManager.accentColor.r,
+                                  themeManager.accentColor.g,
+                                  themeManager.accentColor.b, 0.55)
+        }
+
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 8
+            spacing: 5
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 7
+
+                Rectangle {
+                    width: 7; height: 7; radius: 3.5
+                    color: themeManager.accentColor
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: "CIDERDECK SYSTEM UPDATE"
+                    color: themeManager.textColor
+                    font.pixelSize: 11 * updatesTile.contentScale
+                    font.weight: Font.DemiBold
+                    font.family: "monospace"
+                }
+                Rectangle {
+                    id: cancelButton
+                    width: cancelLabel.implicitWidth + 18
+                    height: 26 * updatesTile.contentScale
+                    radius: 5
+                    color: cancelMouse.pressed
+                           ? Qt.rgba(0.9, 0.2, 0.2, 0.30)
+                           : Qt.rgba(0.9, 0.2, 0.2, 0.16)
+                    border.width: 1
+                    border.color: Qt.rgba(0.95, 0.3, 0.3, 0.55)
+
+                    Text {
+                        id: cancelLabel
+                        anchors.centerIn: parent
+                        text: "Cancel"
+                        color: themeManager.textColor
+                        font.pixelSize: 10 * updatesTile.contentScale
+                    }
+                    MouseArea {
+                        id: cancelMouse
+                        anchors.fill: parent
+                        onClicked: updateService.cancelUpdate()
+                    }
+                }
+            }
+
+            Rectangle {
+                id: terminalViewport
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                radius: 4
+                color: "#090d13"
+                clip: true
+
+                onWidthChanged: terminalView.updateTerminalSize()
+                onHeightChanged: terminalView.updateTerminalSize()
+
+                Flickable {
+                    id: terminalScroll
+                    anchors.fill: parent
+                    anchors.margins: 6
+                    clip: true
+                    contentWidth: width
+                    contentHeight: terminalText.implicitHeight
+                    boundsBehavior: Flickable.StopAtBounds
+                    flickableDirection: Flickable.VerticalFlick
+
+                    TextEdit {
+                        id: terminalText
+                        width: terminalScroll.width
+                        text: updateService.terminalOutput
+                        color: "#e8edf5"
+                        selectionColor: themeManager.accentColor
+                        selectedTextColor: "white"
+                        font.family: "monospace"
+                        font.pixelSize: 11 * updatesTile.contentScale
+                        wrapMode: TextEdit.WrapAnywhere
+                        readOnly: true
+                        selectByMouse: true
+                        activeFocusOnPress: false
+                    }
+
+                    ScrollBar.vertical: ScrollBar {
+                        policy: ScrollBar.AsNeeded
+                    }
+                }
+            }
+
+            Text {
+                Layout.fillWidth: true
+                text: "Keyboard input goes directly to the updater · Ctrl+C also cancels the current command"
+                color: themeManager.secondaryTextColor
+                font.pixelSize: 8.5 * updatesTile.contentScale
+                elide: Text.ElideRight
+            }
+        }
+
+        Connections {
+            target: updateService
+            function onTerminalOutputChanged() {
+                Qt.callLater(terminalView.scrollToBottom)
+            }
+            function onUpdated() {
+                if (updateService.terminalActive)
+                    Qt.callLater(terminalView.forceActiveFocus)
             }
         }
     }

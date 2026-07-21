@@ -62,6 +62,12 @@ Window {
         contentValidatorOwner = ""
     }
 
+    function syncKeyboardInteractivity() {
+        deckApp.setKeyboardEnabled(editController.editing
+                                   || settingsPanel.isOpen
+                                   || updateService.terminalActive)
+    }
+
     // Background touch area for context menu and edit mode exit
     MouseArea {
         id: backgroundArea
@@ -266,7 +272,14 @@ Window {
     Connections {
         target: editController
         function onEditingChanged() {
-            deckApp.setKeyboardEnabled(editController.editing || settingsPanel.isOpen)
+            root.syncKeyboardInteractivity()
+        }
+    }
+
+    Connections {
+        target: updateService
+        function onUpdated() {
+            root.syncKeyboardInteractivity()
         }
     }
 
@@ -280,7 +293,7 @@ Window {
         id: settingsPanel
         z: 300
         onIsOpenChanged: {
-            deckApp.setKeyboardEnabled(editController.editing || isOpen)
+            root.syncKeyboardInteractivity()
         }
     }
 }

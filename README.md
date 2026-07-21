@@ -37,7 +37,8 @@ On Arch Linux, the build and core runtime dependencies are represented by the
 
 Optional runtime integrations include:
 
-- `pacman-contrib`, `paru`, Flatpak, and Konsole for update checks and actions
+- `pacman-contrib`, `paru`, and Flatpak for update checks and actions; Konsole
+  is used only as a fallback if CiderDeck cannot create its embedded updater terminal
 - EasyEffects for audio EQ preset selection
 - `nvidia-smi` from `nvidia-utils` for NVIDIA GPU monitoring
 - `gtk-launch` from GTK 3 for launching some desktop entries

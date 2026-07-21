@@ -28,7 +28,7 @@ optdepends=(
   'pacman-contrib: official repository update checks'
   'paru: AUR update checks and interactive system updates'
   'flatpak: Flatpak update checks and interactive updates'
-  'konsole: interactive update terminal'
+  'konsole: fallback update terminal if the embedded PTY cannot start'
   'easyeffects: audio mixer EQ preset support'
   'nvidia-utils: NVIDIA GPU monitoring'
   'gtk3: launching applications through gtk-launch'
