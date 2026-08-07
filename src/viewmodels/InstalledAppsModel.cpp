@@ -112,8 +112,13 @@ void AppFilterModel::setFilterText(const QString &text) {
     if (filterText_ == text) return;
     filterText_ = text;
     emit filterTextChanged();
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0) && \
+    !defined(CIDERDECK_FORCE_QT65_FILTER_API)
     beginFilterChange();
     endFilterChange();
+#else
+    invalidateFilter();
+#endif
 }
 
 bool AppFilterModel::filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const {

@@ -39,6 +39,8 @@ add_executable(ciderdeck
   src/models/MonitorInfo.h
   src/models/DeckConfig.h
   src/models/DeckConfig.cpp
+  src/models/TouchCalibration.h
+  src/models/TouchCalibration.cpp
 
   src/services/MonitorManager.h
   src/services/MonitorManager.cpp
@@ -155,6 +157,19 @@ include(CTest)
 if(BUILD_TESTING)
   find_package(Qt6 6.5 REQUIRED COMPONENTS Test)
 
+  # Compile the Qt 6.5 filter-invalidation path even when developing with a
+  # newer Qt, so later API usage cannot silently raise the documented minimum.
+  add_library(ciderdeck-qt65-compatibility-build OBJECT
+    src/viewmodels/InstalledAppsModel.h
+    src/viewmodels/InstalledAppsModel.cpp
+  )
+  target_include_directories(ciderdeck-qt65-compatibility-build PRIVATE src)
+  target_compile_definitions(ciderdeck-qt65-compatibility-build PRIVATE
+    CIDERDECK_FORCE_QT65_FILTER_API
+    QT_NO_DEPRECATED_WARNINGS
+  )
+  target_link_libraries(ciderdeck-qt65-compatibility-build PRIVATE Qt6::Core)
+
   add_executable(ciderdeck-model-tests
     tests/ModelTests.cpp
     src/models/DeckConfig.h
@@ -206,6 +221,31 @@ if(BUILD_TESTING)
   )
   add_test(NAME ciderdeck-service-settings-tests COMMAND ciderdeck-service-settings-tests)
 
+  add_executable(ciderdeck-evdev-touch-tests
+    tests/EvdevTouchServiceTests.cpp
+    src/models/TouchCalibration.h
+    src/models/TouchCalibration.cpp
+    src/services/EvdevTouchService.h
+    src/services/EvdevTouchService.cpp
+  )
+  target_include_directories(ciderdeck-evdev-touch-tests PRIVATE src)
+  target_link_libraries(ciderdeck-evdev-touch-tests PRIVATE
+    Qt6::Core
+    Qt6::DBus
+    Qt6::Gui
+    Qt6::Test
+  )
+  add_test(NAME ciderdeck-evdev-touch-tests COMMAND ciderdeck-evdev-touch-tests)
+
+  add_executable(ciderdeck-touch-calibration-tests
+    tests/TouchCalibrationTests.cpp
+    src/models/TouchCalibration.h
+    src/models/TouchCalibration.cpp
+  )
+  target_include_directories(ciderdeck-touch-calibration-tests PRIVATE src)
+  target_link_libraries(ciderdeck-touch-calibration-tests PRIVATE Qt6::Core Qt6::Test)
+  add_test(NAME ciderdeck-touch-calibration-tests COMMAND ciderdeck-touch-calibration-tests)
+
   find_program(QMLLINT_EXECUTABLE NAMES qmllint)
   if(QMLLINT_EXECUTABLE)
     file(GLOB CIDERDECK_QML_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/qml/*.qml")
@@ -218,5 +258,11 @@ if(BUILD_TESTING)
     COMMAND "${CMAKE_COMMAND}"
       "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
       -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/VerifyTileContentScale.cmake"
+  )
+
+  add_test(NAME ciderdeck-qt65-compatibility-contract
+    COMMAND "${CMAKE_COMMAND}"
+      "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+      -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/VerifyQt65Compatibility.cmake"
   )
 endif()
