@@ -1,5 +1,6 @@
 #include "AudioMixerService.h"
 #include "AudioManager.h"
+#include "AudioRoutingPolicy.h"
 
 #include <QDir>
 #include <QFile>
@@ -13,11 +14,25 @@
 #include <PulseAudioQt/context.h>
 #include <PulseAudioQt/models.h>
 #include <PulseAudioQt/client.h>
+#include <PulseAudioQt/sink.h>
 #include <PulseAudioQt/sinkinput.h>
 #include <PulseAudioQt/source.h>
 #endif
 
 namespace ciderdeck {
+
+#ifdef HAVE_KF6PULSEAUDIOQT
+static QString sinkInputAppName(PulseAudioQt::SinkInput *stream)
+{
+    if (!stream) return {};
+    if (stream->client() && !stream->client()->name().isEmpty()) {
+        return stream->client()->name();
+    }
+    const QString appName =
+        stream->properties().value(QStringLiteral("application.name")).toString();
+    return appName.isEmpty() ? stream->name() : appName;
+}
+#endif
 
 AudioMixerService::AudioMixerService(AudioManager *audioManager, QObject *parent)
     : QObject(parent)
@@ -36,6 +51,26 @@ AudioMixerService::AudioMixerService(AudioManager *audioManager, QObject *parent
         auto *sim = static_cast<PulseAudioQt::SinkInputModel *>(simObj);
         connect(sim, &PulseAudioQt::SinkInputModel::rowsInserted,
                 this, &AudioMixerService::onSinkInputAdded);
+        connect(sim, &PulseAudioQt::SinkInputModel::dataChanged,
+                this,
+                [this](const QModelIndex &topLeft,
+                       const QModelIndex &bottomRight,
+                       const QList<int> &) {
+            // PipeWire clients can publish their application identity shortly
+            // after the stream row first appears (Zen commonly starts as the
+            // generic "AudioStream"). Re-evaluate changed rows so the saved
+            // category trim is applied as soon as the real app name arrives.
+            onSinkInputAdded(topLeft.parent(), topLeft.row(), bottomRight.row());
+        });
+    }
+
+    QObject *sinkObj = audioManager_->sinkModel();
+    if (sinkObj) {
+        auto *sinkModel = static_cast<PulseAudioQt::SinkModel *>(sinkObj);
+        const auto sinksChanged = [this]() { onSinkModelChanged(); };
+        connect(sinkModel, &QAbstractItemModel::rowsInserted, this, sinksChanged);
+        connect(sinkModel, &QAbstractItemModel::rowsRemoved, this, sinksChanged);
+        connect(sinkModel, &QAbstractItemModel::dataChanged, this, sinksChanged);
     }
 
     // Monitor default source for mic volume/muted changes
@@ -57,6 +92,10 @@ AudioMixerService::AudioMixerService(AudioManager *audioManager, QObject *parent
 #endif
 
     loadConfig();
+    // AudioManager is constructed first, so its sink-input model may already
+    // contain active streams before this service connects to rowsInserted.
+    // Apply the loaded category state once at startup as well.
+    syncGroupVolumes();
 
     if (eqAvailable_) {
         refreshEqPresets();
@@ -93,6 +132,7 @@ void AudioMixerService::loadConfig()
     }
 
     groups_.clear();
+    bool removedInternalStreams = false;
     const auto arr = doc.array();
     for (const auto &val : arr) {
         const auto obj = val.toObject();
@@ -101,10 +141,16 @@ void AudioMixerService::loadConfig()
         g.volume    = obj[QStringLiteral("volume")].toInt(100);
         g.muted     = obj[QStringLiteral("muted")].toBool(false);
         g.isGeneral = obj[QStringLiteral("isGeneral")].toBool(false);
+        g.outputSinkName = obj[QStringLiteral("outputSinkName")].toString();
 
         const auto appsArr = obj[QStringLiteral("apps")].toArray();
         for (const auto &a : appsArr) {
-            g.apps.append(a.toString());
+            const QString appName = a.toString();
+            if (audio::isInternalProcessingStreamName(appName)) {
+                removedInternalStreams = true;
+                continue;
+            }
+            g.apps.append(appName);
         }
         groups_.append(g);
     }
@@ -112,6 +158,10 @@ void AudioMixerService::loadConfig()
     if (groups_.isEmpty()) {
         ensureDefaultGroups();
         return;
+    }
+
+    if (removedInternalStreams) {
+        saveConfig();
     }
 
     emit groupsChanged();
@@ -131,6 +181,9 @@ void AudioMixerService::saveConfig()
         obj[QStringLiteral("muted")]     = g.muted;
         obj[QStringLiteral("isGeneral")] = g.isGeneral;
         obj[QStringLiteral("apps")]      = appsArr;
+        if (!g.outputSinkName.isEmpty()) {
+            obj[QStringLiteral("outputSinkName")] = g.outputSinkName;
+        }
         arr.append(obj);
     }
 
@@ -171,6 +224,7 @@ void AudioMixerService::ensureDefaultGroups()
 
 QVariantList AudioMixerService::groups() const
 {
+    const QVariantList destinations = outputDestinations();
     QVariantList result;
     result.reserve(groups_.size());
     for (const auto &g : groups_) {
@@ -179,6 +233,19 @@ QVariantList AudioMixerService::groups() const
         map[QStringLiteral("volume")]    = g.volume;
         map[QStringLiteral("muted")]     = g.muted;
         map[QStringLiteral("isGeneral")] = g.isGeneral;
+        map[QStringLiteral("outputSinkName")] = g.outputSinkName;
+        bool outputAvailable = g.outputSinkName.isEmpty();
+        QString outputDescription;
+        for (const auto &destinationValue : destinations) {
+            const QVariantMap destination = destinationValue.toMap();
+            if (destination.value(QStringLiteral("name")).toString() == g.outputSinkName) {
+                outputAvailable = true;
+                outputDescription = destination.value(QStringLiteral("description")).toString();
+                break;
+            }
+        }
+        map[QStringLiteral("outputAvailable")] = outputAvailable;
+        map[QStringLiteral("outputDescription")] = outputDescription;
 
         QVariantList apps;
         apps.reserve(g.apps.size());
@@ -189,6 +256,31 @@ QVariantList AudioMixerService::groups() const
 
         result.append(map);
     }
+    return result;
+}
+
+QVariantList AudioMixerService::outputDestinations() const
+{
+    QVariantList result;
+#ifdef HAVE_KF6PULSEAUDIOQT
+    QObject *sinkObj = audioManager_ ? audioManager_->sinkModel() : nullptr;
+    if (!sinkObj) return result;
+    auto *sinkModel = static_cast<PulseAudioQt::SinkModel *>(sinkObj);
+    result.reserve(sinkModel->rowCount());
+    for (int row = 0; row < sinkModel->rowCount(); ++row) {
+        const auto idx = sinkModel->index(row, 0);
+        auto *sink = idx.data(PulseAudioQt::AbstractModel::PulseObjectRole)
+                         .value<PulseAudioQt::Sink *>();
+        if (!sink || sink->name().isEmpty()) continue;
+
+        QVariantMap destination;
+        destination[QStringLiteral("name")] = sink->name();
+        destination[QStringLiteral("description")] = sink->description().isEmpty()
+            ? sink->name()
+            : sink->description();
+        result.append(destination);
+    }
+#endif
     return result;
 }
 
@@ -218,9 +310,7 @@ void AudioMixerService::onSinkInputAdded(const QModelIndex &parent, int first, i
     QObject *simObj = audioManager_->sinkInputModel();
     if (!simObj) return;
     auto *sim = static_cast<PulseAudioQt::SinkInputModel *>(simObj);
-
-    qint64 normalVol = PulseAudioQt::normalVolume();
-    if (normalVol <= 0) return;
+    const qint64 normalVol = PulseAudioQt::normalVolume();
 
     for (int row = first; row <= last; ++row) {
         const auto idx = sim->index(row, 0);
@@ -228,8 +318,11 @@ void AudioMixerService::onSinkInputAdded(const QModelIndex &parent, int first, i
                        .value<PulseAudioQt::SinkInput *>();
         if (!si) continue;
 
-        const QString appName = si->name();
-        if (appName.isEmpty()) continue;
+        const QString appName = sinkInputAppName(si);
+        if (appName.isEmpty() || audio::isInternalProcessingStreamName(appName)
+            || audio::isInternalProcessingStreamName(si->name())) {
+            continue;
+        }
 
         int gi = matchGroup(appName);
 
@@ -241,13 +334,83 @@ void AudioMixerService::onSinkInputAdded(const QModelIndex &parent, int first, i
         }
         if (gi < 0) continue;
 
-        const auto &g = groups_[gi];
-        qint64 paVolume = static_cast<qint64>(g.volume) * normalVol / 100;
-        si->setVolume(paVolume);
-        si->setMuted(g.muted);
+        if (normalVol > 0) {
+            const auto &g = groups_[gi];
+            const qint64 paVolume = static_cast<qint64>(g.volume) * normalVol / 100;
+            // dataChanged also feeds this path, so avoid issuing no-op writes that
+            // would otherwise cause another model update.
+            if (si->volume() != paVolume) {
+                si->setVolume(paVolume);
+            }
+            if (si->isMuted() != g.muted) {
+                si->setMuted(g.muted);
+            }
+        }
+        routeSinkInput(si);
     }
 #else
     Q_UNUSED(first) Q_UNUSED(last)
+#endif
+}
+
+void AudioMixerService::onSinkModelChanged()
+{
+    emit outputDestinationsChanged();
+    emit groupsChanged();
+    routeAllSinkInputs();
+}
+
+void AudioMixerService::routeSinkInput(PulseAudioQt::SinkInput *stream)
+{
+#ifdef HAVE_KF6PULSEAUDIOQT
+    if (!stream || !audioManager_) return;
+
+    QList<audio::RoutingGroup> routingGroups;
+    routingGroups.reserve(groups_.size());
+    for (const auto &group : groups_) {
+        routingGroups.append({group.apps, group.outputSinkName, group.isGeneral});
+    }
+
+    QList<audio::RoutingSink> routingSinks;
+    QObject *sinkObj = audioManager_->sinkModel();
+    if (sinkObj) {
+        auto *sinkModel = static_cast<PulseAudioQt::SinkModel *>(sinkObj);
+        routingSinks.reserve(sinkModel->rowCount());
+        for (int row = 0; row < sinkModel->rowCount(); ++row) {
+            const auto idx = sinkModel->index(row, 0);
+            auto *sink = idx.data(PulseAudioQt::AbstractModel::PulseObjectRole)
+                             .value<PulseAudioQt::Sink *>();
+            if (sink) {
+                routingSinks.append({sink->name(), sink->description(), sink->index()});
+            }
+        }
+    }
+
+    const auto targetDeviceIndex = audio::routeTargetDeviceIndex(
+        {sinkInputAppName(stream), stream->name(), stream->deviceIndex()},
+        routingGroups,
+        routingSinks);
+    if (targetDeviceIndex.has_value()) {
+        stream->setDeviceIndex(targetDeviceIndex.value());
+    }
+#else
+    Q_UNUSED(stream)
+#endif
+}
+
+void AudioMixerService::routeAllSinkInputs()
+{
+#ifdef HAVE_KF6PULSEAUDIOQT
+    if (!audioManager_) return;
+    QObject *simObj = audioManager_->sinkInputModel();
+    if (!simObj) return;
+    auto *sim = static_cast<PulseAudioQt::SinkInputModel *>(simObj);
+    for (int row = 0; row < sim->rowCount(); ++row) {
+        const auto idx = sim->index(row, 0);
+        auto *stream = idx.data(PulseAudioQt::AbstractModel::PulseObjectRole)
+                           .value<PulseAudioQt::SinkInput *>();
+        routeSinkInput(stream);
+    }
 #endif
 }
 
@@ -297,6 +460,17 @@ void AudioMixerService::setGroupMuted(int groupIndex, bool muted)
     saveConfig();
 }
 
+void AudioMixerService::setGroupOutput(int groupIndex, const QString &sinkName)
+{
+    if (groupIndex < 0 || groupIndex >= groups_.size()) return;
+    if (groups_[groupIndex].outputSinkName == sinkName) return;
+
+    groups_[groupIndex].outputSinkName = sinkName;
+    emit groupsChanged();
+    saveConfig();
+    routeAllSinkInputs();
+}
+
 // ---------------------------------------------------------------------------
 // Group management
 // ---------------------------------------------------------------------------
@@ -319,6 +493,7 @@ void AudioMixerService::removeGroup(int groupIndex)
     groups_.removeAt(groupIndex);
     emit groupsChanged();
     saveConfig();
+    routeAllSinkInputs();
 }
 
 void AudioMixerService::renameGroup(int groupIndex, const QString &name)
@@ -337,25 +512,39 @@ void AudioMixerService::renameGroup(int groupIndex, const QString &name)
 void AudioMixerService::addAppToGroup(int groupIndex, const QString &appName)
 {
     if (groupIndex < 0 || groupIndex >= groups_.size()) return;
-    if (appName.isEmpty()) return;
+    if (appName.isEmpty() || audio::isInternalProcessingStreamName(appName)) return;
     if (groups_[groupIndex].apps.contains(appName)) return;
     groups_[groupIndex].apps.append(appName);
     emit groupsChanged();
     saveConfig();
+    routeAllSinkInputs();
 }
 
 void AudioMixerService::removeAppFromGroup(int groupIndex, const QString &appName)
 {
     if (groupIndex < 0 || groupIndex >= groups_.size()) return;
+    if (!groups_[groupIndex].apps.contains(appName)) return;
     groups_[groupIndex].apps.removeAll(appName);
     emit groupsChanged();
     saveConfig();
+    routeAllSinkInputs();
 }
 
 void AudioMixerService::moveAppToGroup(const QString &appName, int targetGroupIndex)
 {
     if (targetGroupIndex < 0 || targetGroupIndex >= groups_.size()) return;
-    if (appName.isEmpty()) return;
+    if (appName.isEmpty() || audio::isInternalProcessingStreamName(appName)) return;
+
+    bool assignmentMatches = true;
+    for (int i = 0; i < groups_.size(); ++i) {
+        const bool shouldContain = i == targetGroupIndex
+            && !groups_[targetGroupIndex].isGeneral;
+        if (groups_[i].apps.contains(appName) != shouldContain) {
+            assignmentMatches = false;
+            break;
+        }
+    }
+    if (assignmentMatches) return;
 
     // Remove from any existing group
     for (auto &g : groups_) {
@@ -369,6 +558,7 @@ void AudioMixerService::moveAppToGroup(const QString &appName, int targetGroupIn
 
     emit groupsChanged();
     saveConfig();
+    routeAllSinkInputs();
 }
 
 // ---------------------------------------------------------------------------
@@ -520,6 +710,7 @@ void AudioMixerService::syncGroupVolumes()
             audioManager_->setAppMuted(app, g.muted);
         }
     }
+    routeAllSinkInputs();
 }
 
 // ---------------------------------------------------------------------------
@@ -539,17 +730,10 @@ QStringList AudioMixerService::activeAudioApps() const
         auto *si = idx.data(PulseAudioQt::AbstractModel::PulseObjectRole)
                        .value<PulseAudioQt::SinkInput *>();
         if (!si) continue;
+        if (audio::isInternalProcessingStreamName(si->name())) continue;
         // Use client name to match findStreamsByApp() resolution order
-        QString name;
-        if (si->client()) {
-            name = si->client()->name();
-        }
-        if (name.isEmpty()) {
-            name = si->properties().value(QStringLiteral("application.name")).toString();
-        }
-        if (name.isEmpty()) {
-            name = si->name();
-        }
+        const QString name = sinkInputAppName(si);
+        if (audio::isInternalProcessingStreamName(name)) continue;
         if (!name.isEmpty() && !result.contains(name)) {
             result.append(name);
         }

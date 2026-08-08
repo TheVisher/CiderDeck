@@ -221,6 +221,32 @@ if(BUILD_TESTING)
   )
   add_test(NAME ciderdeck-service-settings-tests COMMAND ciderdeck-service-settings-tests)
 
+  add_executable(ciderdeck-audio-mixer-tests
+    tests/AudioMixerServiceTests.cpp
+    src/services/AudioManager.h
+    src/services/AudioManager.cpp
+    src/services/AudioMixerService.h
+    src/services/AudioMixerService.cpp
+  )
+  target_include_directories(ciderdeck-audio-mixer-tests PRIVATE src)
+  target_link_libraries(ciderdeck-audio-mixer-tests PRIVATE
+    Qt6::Core
+    Qt6::Test
+  )
+  add_test(NAME ciderdeck-audio-mixer-tests COMMAND ciderdeck-audio-mixer-tests)
+
+  add_test(NAME ciderdeck-audio-routing-contract
+    COMMAND "${CMAKE_COMMAND}"
+      "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+      -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/VerifyAudioRoutingWiring.cmake"
+  )
+
+  add_test(NAME ciderdeck-mixer-output-picker-contract
+    COMMAND "${CMAKE_COMMAND}"
+      "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+      -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/VerifyMixerOutputPicker.cmake"
+  )
+
   add_executable(ciderdeck-evdev-touch-tests
     tests/EvdevTouchServiceTests.cpp
     src/models/TouchCalibration.h
