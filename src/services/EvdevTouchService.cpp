@@ -30,14 +30,22 @@ bool bitIsSet(const unsigned long (&bits)[N], unsigned int bit)
     return bit / bitsPerWord < N && (bits[bit / bitsPerWord] & (1UL << (bit % bitsPerWord)));
 }
 
+QString touchCalibrationStoragePath()
+{
+    const QString overrideDirectory = qEnvironmentVariable("CIDERDECK_CONFIG_DIR");
+    const QString directory = overrideDirectory.isEmpty()
+        ? QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation)
+        : overrideDirectory;
+    return QDir(directory).filePath(QStringLiteral("touch-calibration.json"));
+}
+
 } // namespace
 
 EvdevTouchService::EvdevTouchService(QWindow *window, QObject *parent)
     : QObject(parent)
     , window_(window)
     , deviceProbe_(&EvdevTouchService::probeDevice)
-    , calibrationStoragePath_(QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation)
-                              + QStringLiteral("/touch-calibration.json"))
+    , calibrationStoragePath_(touchCalibrationStoragePath())
 {
     reconnectTimer_ = new QTimer(this);
     reconnectTimer_->setSingleShot(true);
@@ -98,6 +106,70 @@ void EvdevTouchService::RetryState::reset()
 bool EvdevTouchService::DeviceIdentity::isValid() const
 {
     return vendor != 0 || product != 0 || !name.isEmpty() || !physical.isEmpty();
+}
+
+QString EvdevTouchService::deviceName() const
+{
+    return selectedIdentity_.name;
+}
+
+QString EvdevTouchService::deviceIdentity() const
+{
+    if (!selectedIdentity_.isValid())
+        return {};
+    return stableTouchscreenIdentity(
+        selectedIdentity_.busType, selectedIdentity_.vendor,
+        selectedIdentity_.product, selectedIdentity_.version,
+        selectedIdentity_.name, selectedIdentity_.physical);
+}
+
+QString EvdevTouchService::statusText() const
+{
+    if (active())
+        return QStringLiteral("Direct touch input active");
+    if (!lastOpenError_.isEmpty())
+        return lastOpenError_;
+    return QStringLiteral("Waiting for a direct touchscreen");
+}
+
+void EvdevTouchService::useCalibration(const TouchAffineTransform &transform)
+{
+    calibrationTransform_ = transform.isValid() ? transform : TouchAffineTransform::identity();
+    emit calibrationChanged();
+}
+
+bool EvdevTouchService::saveCalibration(const TouchAffineTransform &transform, QString *error)
+{
+    const QString identity = deviceIdentity();
+    if (identity.isEmpty() || calibrationStoragePath_.isEmpty()) {
+        if (error)
+            *error = QStringLiteral("No stable touchscreen identity is available");
+        return false;
+    }
+    if (!TouchCalibrationStore(calibrationStoragePath_).saveProfile(identity, transform, error))
+        return false;
+
+    calibrationTransform_ = transform;
+    hasCalibrationProfile_ = true;
+    emit calibrationChanged();
+    return true;
+}
+
+bool EvdevTouchService::resetCalibration(QString *error)
+{
+    const QString identity = deviceIdentity();
+    if (identity.isEmpty() || calibrationStoragePath_.isEmpty()) {
+        if (error)
+            *error = QStringLiteral("No stable touchscreen identity is available");
+        return false;
+    }
+    if (!TouchCalibrationStore(calibrationStoragePath_).removeProfile(identity, error))
+        return false;
+
+    calibrationTransform_ = TouchAffineTransform::identity();
+    hasCalibrationProfile_ = false;
+    emit calibrationChanged();
+    return true;
 }
 
 EvdevTouchService::ProbedDevice EvdevTouchService::probeDevice(const QString &path)
@@ -308,6 +380,50 @@ QPointF EvdevTouchService::normalizedPosition(const TouchUpdate &update) const
     return mapEvdevToNormalized(update.x, update.y,
                                 absXMin_, absXMax_, absYMin_, absYMax_,
                                 calibrationTransform_);
+}
+
+void EvdevTouchService::dispatchTouchUpdate(const TouchUpdate &update)
+{
+    if (update.action == TouchAction::None)
+        return;
+
+    if (window_ && !calibrationCaptureActive_) {
+        const QPointF normalized = normalizedPosition(update);
+        const QPointF localPos(normalized.x() * window_->width(),
+                               normalized.y() * window_->height());
+
+        QEvent::Type eventType = QEvent::MouseMove;
+        Qt::MouseButton button = Qt::NoButton;
+        Qt::MouseButtons buttons = Qt::LeftButton;
+        if (update.action == TouchAction::Press) {
+            eventType = QEvent::MouseButtonPress;
+            button = Qt::LeftButton;
+        } else if (update.action == TouchAction::Release) {
+            eventType = QEvent::MouseButtonRelease;
+            button = Qt::LeftButton;
+            buttons = Qt::NoButton;
+        }
+        QMouseEvent mouseEvent(eventType, localPos, window_->mapToGlobal(localPos),
+                               button, buttons, Qt::NoModifier);
+        QCoreApplication::sendEvent(window_, &mouseEvent);
+    }
+
+    const QPointF rawPosition = mapEvdevToNormalized(
+        update.x, update.y, absXMin_, absXMax_, absYMin_, absYMax_,
+        TouchAffineTransform::identity());
+    switch (update.action) {
+    case TouchAction::Press:
+        emit rawTouchPressed(rawPosition);
+        break;
+    case TouchAction::Move:
+        emit rawTouchMoved(rawPosition);
+        break;
+    case TouchAction::Release:
+        emit rawTouchReleased(rawPosition);
+        break;
+    case TouchAction::None:
+        break;
+    }
 }
 
 EvdevTouchService::DeviceProbeResult EvdevTouchService::probeResultForOpenError(int errorNumber)
@@ -572,21 +688,23 @@ void EvdevTouchService::handleReconnectFailure()
 void EvdevTouchService::loadCalibrationProfile()
 {
     calibrationTransform_ = TouchAffineTransform::identity();
+    hasCalibrationProfile_ = false;
     if (!selectedIdentity_.isValid() || calibrationStoragePath_.isEmpty())
         return;
 
-    const QString stableIdentity = stableTouchscreenIdentity(
-        selectedIdentity_.busType, selectedIdentity_.vendor,
-        selectedIdentity_.product, selectedIdentity_.version,
-        selectedIdentity_.name, selectedIdentity_.physical);
+    const QString stableIdentity = deviceIdentity();
     QString error;
-    calibrationTransform_ = TouchCalibrationStore(calibrationStoragePath_)
-                                .profileFor(stableIdentity, &error);
+    const TouchCalibrationStore store(calibrationStoragePath_);
+    hasCalibrationProfile_ = store.hasProfile(stableIdentity, &error);
+    if (error.isEmpty() && hasCalibrationProfile_)
+        calibrationTransform_ = store.profileFor(stableIdentity, &error);
     if (!error.isEmpty()) {
+        hasCalibrationProfile_ = false;
         qWarning().noquote()
             << "[EvdevTouchService] Ignoring touchscreen calibration settings:"
             << error << "— using identity transform";
     }
+    emit calibrationChanged();
 }
 
 void EvdevTouchService::logOpened(bool recovered) const
@@ -674,26 +792,7 @@ void EvdevTouchService::onReadReady()
         }
 
         const TouchUpdate update = processInputEvent(inputState_, ev.type, ev.code, ev.value);
-        if (update.action != TouchAction::None && window_) {
-            const QPointF normalized = normalizedPosition(update);
-            const QPointF localPos(normalized.x() * window_->width(),
-                                   normalized.y() * window_->height());
-
-            QEvent::Type eventType = QEvent::MouseMove;
-            Qt::MouseButton button = Qt::NoButton;
-            Qt::MouseButtons buttons = Qt::LeftButton;
-            if (update.action == TouchAction::Press) {
-                eventType = QEvent::MouseButtonPress;
-                button = Qt::LeftButton;
-            } else if (update.action == TouchAction::Release) {
-                eventType = QEvent::MouseButtonRelease;
-                button = Qt::LeftButton;
-                buttons = Qt::NoButton;
-            }
-            QMouseEvent mouseEvent(eventType, localPos, window_->mapToGlobal(localPos),
-                                   button, buttons, Qt::NoModifier);
-            QCoreApplication::sendEvent(window_, &mouseEvent);
-        }
+        dispatchTouchUpdate(update);
 
         if (update.reconnect) {
             closeDevice();

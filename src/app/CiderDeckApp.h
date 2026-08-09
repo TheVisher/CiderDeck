@@ -27,6 +27,7 @@ class TimerService;
 class AudioMixerService;
 class KWinDBusClient;
 class EvdevTouchService;
+class TouchCalibrationService;
 class TileGridModel;
 class EditModeController;
 class ToastModel;
@@ -72,6 +73,7 @@ private:
     AppFilterModel *appFilterModel_ = nullptr;
     QWindow *mainWindow_ = nullptr;
     EvdevTouchService *evdevTouch_ = nullptr;
+    TouchCalibrationService *touchCalibration_ = nullptr;
 };
 
 } // namespace ciderdeck

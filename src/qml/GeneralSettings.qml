@@ -8,8 +8,24 @@ Flickable {
     contentHeight: settingsColumn.height
     flickableDirection: Flickable.VerticalFlick
     readonly property real ts: deckConfig.settingsTextScale
+    property bool resetCalibrationArmed: false
+
+    function activateControlKey(event, control) {
+        if (event.key === Qt.Key_Return
+                || event.key === Qt.Key_Enter
+                || event.key === Qt.Key_Space) {
+            control.activate()
+            event.accepted = true
+        }
+    }
 
     ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+    Timer {
+        id: resetCalibrationTimer
+        interval: 5000
+        onTriggered: generalSettings.resetCalibrationArmed = false
+    }
 
     ColumnLayout {
         id: settingsColumn
@@ -299,6 +315,131 @@ Flickable {
                     }
                 }
                 implicitWidth: 180
+            }
+        }
+
+        Rectangle { Layout.fillWidth: true; height: 1; color: themeManager.borderColor }
+
+        Text {
+            text: "Touch calibration"
+            color: themeManager.accentColor
+            font.pixelSize: 15 * generalSettings.ts
+            font.bold: true
+        }
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 5
+
+            Text {
+                text: touchCalibrationService.deviceAvailable
+                    ? touchCalibrationService.statusText
+                    : "Unavailable — " + touchCalibrationService.statusText
+                color: touchCalibrationService.deviceAvailable
+                    ? themeManager.textColor : themeManager.errorColor
+                font.pixelSize: 13 * generalSettings.ts
+                font.bold: true
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+            }
+
+            Text {
+                text: "Device: " + (touchCalibrationService.deviceName || "No direct touchscreen detected")
+                color: themeManager.secondaryTextColor
+                font.pixelSize: 12 * generalSettings.ts
+                Layout.fillWidth: true
+                elide: Text.ElideRight
+            }
+
+            Text {
+                text: "Path: " + (touchCalibrationService.devicePath || "Unavailable")
+                color: themeManager.secondaryTextColor
+                font.pixelSize: 11 * generalSettings.ts
+                Layout.fillWidth: true
+                elide: Text.ElideMiddle
+            }
+
+            Text {
+                text: "Identity: " + (touchCalibrationService.deviceIdentity || "Unavailable")
+                color: themeManager.secondaryTextColor
+                font.pixelSize: 11 * generalSettings.ts
+                Layout.fillWidth: true
+                elide: Text.ElideMiddle
+            }
+
+            Text {
+                text: touchCalibrationService.hasCalibration
+                    ? "A saved profile is applied to this device."
+                    : "This device is using the default mapping."
+                color: themeManager.secondaryTextColor
+                font.pixelSize: 12 * generalSettings.ts
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 10
+
+            Button {
+                id: startCalibrationButton
+                text: "Calibrate touchscreen"
+                enabled: touchCalibrationService.deviceAvailable
+                         && !touchCalibrationService.active
+                implicitWidth: 190
+                implicitHeight: 48
+                activeFocusOnTab: true
+                Accessible.role: Accessible.Button
+                Accessible.name: enabled
+                    ? "Start five point touchscreen calibration"
+                    : "Touchscreen calibration unavailable"
+                Accessible.onPressAction: startCalibrationButton.activate()
+                Keys.onPressed: (event) => generalSettings.activateControlKey(event, startCalibrationButton)
+
+                function activate() {
+                    if (!enabled)
+                        return
+                    generalSettings.resetCalibrationArmed = false
+                    resetCalibrationTimer.stop()
+                    if (!touchCalibrationService.start())
+                        toastModel.show("Touchscreen calibration is unavailable", 3000)
+                }
+
+                onClicked: startCalibrationButton.activate()
+            }
+
+            Button {
+                id: resetCalibrationButton
+                text: generalSettings.resetCalibrationArmed ? "Confirm reset" : "Reset profile"
+                enabled: touchCalibrationService.deviceAvailable
+                         && touchCalibrationService.hasCalibration
+                         && !touchCalibrationService.active
+                implicitWidth: 150
+                implicitHeight: 48
+                activeFocusOnTab: true
+                Accessible.role: Accessible.Button
+                Accessible.name: generalSettings.resetCalibrationArmed
+                    ? "Confirm reset of the saved touchscreen calibration"
+                    : "Reset the saved touchscreen calibration"
+                Accessible.onPressAction: resetCalibrationButton.activate()
+                Keys.onPressed: (event) => generalSettings.activateControlKey(event, resetCalibrationButton)
+
+                function activate() {
+                    if (!enabled)
+                        return
+                    if (!generalSettings.resetCalibrationArmed) {
+                        generalSettings.resetCalibrationArmed = true
+                        resetCalibrationTimer.restart()
+                        return
+                    }
+                    resetCalibrationTimer.stop()
+                    generalSettings.resetCalibrationArmed = false
+                    if (touchCalibrationService.reset())
+                        toastModel.show("Touchscreen calibration reset", 3000)
+                    else
+                        toastModel.show(touchCalibrationService.errorMessage, 4000)
+                }
+
+                onClicked: resetCalibrationButton.activate()
             }
         }
 

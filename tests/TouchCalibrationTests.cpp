@@ -34,6 +34,7 @@ private slots:
     void rejectsHugeMixedAxisTransformsWhoseSafetyMetricsOverflow();
     void rejectsDegenerateAndPoorCalibrationFits();
     void persistsAndLooksUpProfilesByStableDeviceIdentity();
+    void removesOnlyTheSelectedDeviceProfile();
     void malformedLegacyAndUnknownSettingsFallBackToIdentity();
     void mapsEvdevCoordinatesThroughDeviceCalibrationBeforePixels();
     void mapsExtremeEvdevRangesWithoutOverflow();
@@ -431,6 +432,26 @@ void TouchCalibrationTests::persistsAndLooksUpProfilesByStableDeviceIdentity()
     QVERIFY(error.isEmpty());
     QCOMPARE(store.profileFor(QStringLiteral("other-device")).coefficients(),
              TouchAffineTransform::identity().coefficients());
+}
+
+void TouchCalibrationTests::removesOnlyTheSelectedDeviceProfile()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    TouchCalibrationStore store(directory.filePath(QStringLiteral("touch-calibration.json")));
+    const TouchAffineTransform first({0.8, 0.0, 0.1, 0.0, 0.9, 0.05});
+    const TouchAffineTransform second = TouchAffineTransform::rotation(90);
+    QVERIFY(store.saveProfile(QStringLiteral("first-device"), first));
+    QVERIFY(store.saveProfile(QStringLiteral("second-device"), second));
+    QVERIFY(store.hasProfile(QStringLiteral("first-device")));
+    QVERIFY(store.hasProfile(QStringLiteral("second-device")));
+
+    QVERIFY(store.removeProfile(QStringLiteral("first-device")));
+
+    QVERIFY(!store.hasProfile(QStringLiteral("first-device")));
+    QVERIFY(store.hasProfile(QStringLiteral("second-device")));
+    QCOMPARE(store.profileFor(QStringLiteral("second-device")).coefficients(),
+             second.coefficients());
 }
 
 void TouchCalibrationTests::malformedLegacyAndUnknownSettingsFallBackToIdentity()

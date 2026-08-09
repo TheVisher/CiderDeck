@@ -78,6 +78,8 @@ add_executable(ciderdeck
   src/services/KWinDBusClient.cpp
   src/services/EvdevTouchService.h
   src/services/EvdevTouchService.cpp
+  src/services/TouchCalibrationService.h
+  src/services/TouchCalibrationService.cpp
 
   src/viewmodels/TileGridModel.h
   src/viewmodels/TileGridModel.cpp
@@ -271,6 +273,31 @@ if(BUILD_TESTING)
   target_include_directories(ciderdeck-touch-calibration-tests PRIVATE src)
   target_link_libraries(ciderdeck-touch-calibration-tests PRIVATE Qt6::Core Qt6::Test)
   add_test(NAME ciderdeck-touch-calibration-tests COMMAND ciderdeck-touch-calibration-tests)
+
+  add_executable(ciderdeck-touch-calibration-service-tests
+    tests/TouchCalibrationServiceTests.cpp
+    src/models/TouchCalibration.h
+    src/models/TouchCalibration.cpp
+    src/services/TouchCalibrationService.h
+    src/services/TouchCalibrationService.cpp
+  )
+  target_include_directories(ciderdeck-touch-calibration-service-tests PRIVATE src)
+  target_link_libraries(ciderdeck-touch-calibration-service-tests PRIVATE Qt6::Core Qt6::Test)
+  add_test(NAME ciderdeck-touch-calibration-service-tests
+    COMMAND ciderdeck-touch-calibration-service-tests)
+
+  add_test(NAME ciderdeck-touch-calibration-wizard-contract
+    COMMAND "${CMAKE_COMMAND}"
+      "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+      -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/VerifyTouchCalibrationWizard.cmake"
+  )
+
+  add_test(NAME ciderdeck-headless-startup-smoke
+    COMMAND "${CMAKE_COMMAND}"
+      "-DCIDERDECK_EXECUTABLE=$<TARGET_FILE:ciderdeck>"
+      "-DSTARTUP_CONFIG_DIR=${CMAKE_CURRENT_BINARY_DIR}/headless-startup-config"
+      -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/VerifyHeadlessStartup.cmake"
+  )
 
   find_program(QMLLINT_EXECUTABLE NAMES qmllint)
   if(QMLLINT_EXECUTABLE)

@@ -41,5 +41,6 @@
         <file>IconTouchButton.qml</file>
         <file>VerticalSlider.qml</file>
         <file>MarqueeText.qml</file>
+        <file>TouchCalibrationWizard.qml</file>
     </qresource>
 </RCC>

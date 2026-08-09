@@ -52,8 +52,10 @@ public:
 
     TouchAffineTransform profileFor(const QString &stableDeviceIdentity,
                                     QString *error = nullptr) const;
+    bool hasProfile(const QString &stableDeviceIdentity, QString *error = nullptr) const;
     bool saveProfile(const QString &stableDeviceIdentity,
                      const TouchAffineTransform &transform, QString *error = nullptr) const;
+    bool removeProfile(const QString &stableDeviceIdentity, QString *error = nullptr) const;
 
 private:
     QString storagePath_;

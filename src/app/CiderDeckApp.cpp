@@ -43,6 +43,7 @@
 #include "services/TimerService.h"
 #include "services/KWinDBusClient.h"
 #include "services/EvdevTouchService.h"
+#include "services/TouchCalibrationService.h"
 #include "viewmodels/TileGridModel.h"
 #include "viewmodels/EditModeController.h"
 #include "viewmodels/ToastModel.h"
@@ -74,6 +75,20 @@ int CiderDeckApp::run(QApplication &app) {
     clipboardService_ = new ClipboardService(this);
     timerService_ = new TimerService(this);
     kwinClient_ = new KWinDBusClient(this);
+    evdevTouch_ = new EvdevTouchService(nullptr, this);
+    touchCalibration_ = new TouchCalibrationService(evdevTouch_, this);
+    connect(evdevTouch_, &EvdevTouchService::rawTouchPressed,
+            touchCalibration_, &TouchCalibrationService::touchPressed);
+    connect(evdevTouch_, &EvdevTouchService::rawTouchMoved,
+            touchCalibration_, &TouchCalibrationService::touchMoved);
+    connect(evdevTouch_, &EvdevTouchService::rawTouchReleased,
+            touchCalibration_, &TouchCalibrationService::touchReleased);
+    connect(evdevTouch_, &EvdevTouchService::activeChanged,
+            touchCalibration_, &TouchCalibrationService::refreshDeviceStatus);
+    connect(evdevTouch_, &EvdevTouchService::devicePathChanged,
+            touchCalibration_, &TouchCalibrationService::refreshDeviceStatus);
+    connect(evdevTouch_, &EvdevTouchService::calibrationChanged,
+            touchCalibration_, &TouchCalibrationService::refreshDeviceStatus);
     kwinClient_->publishService();
     processManager_->setKWinClient(kwinClient_);
     appLaunchManager_->setKWinClient(kwinClient_);
@@ -139,6 +154,7 @@ int CiderDeckApp::run(QApplication &app) {
     ctx->setContextProperty("toastModel", toastModel_);
     ctx->setContextProperty("installedAppsModel", installedApps_);
     ctx->setContextProperty("appFilterModel", appFilterModel_);
+    ctx->setContextProperty("touchCalibrationService", touchCalibration_);
     ctx->setContextProperty("deckApp", this);
 
     wireSignals();
@@ -161,7 +177,7 @@ int CiderDeckApp::run(QApplication &app) {
             // Direct evdev touch input for the Xeneon Edge touchscreen.
             // Bypasses the compositor so touch works even when Input Leap
             // has the cursor on another machine.
-            evdevTouch_ = new EvdevTouchService(window, this);
+            evdevTouch_->setWindow(window);
             evdevTouch_->start();
         }
     });

@@ -9,6 +9,7 @@
 #include <functional>
 
 #include "models/TouchCalibration.h"
+#include "services/TouchCalibrationService.h"
 
 class QWindow;
 class QSocketNotifier;
@@ -18,7 +19,7 @@ namespace ciderdeck {
 
 class EvdevTouchServiceTests;
 
-class EvdevTouchService : public QObject {
+class EvdevTouchService : public QObject, public TouchCalibrationDevice {
     Q_OBJECT
     Q_PROPERTY(bool active READ active NOTIFY activeChanged)
     Q_PROPERTY(QString devicePath READ devicePath NOTIFY devicePathChanged)
@@ -28,7 +29,18 @@ public:
     ~EvdevTouchService() override;
 
     bool active() const { return fd_ >= 0; }
-    QString devicePath() const { return devicePath_; }
+    QString devicePath() const override { return devicePath_; }
+    bool isAvailable() const override { return active(); }
+    QString deviceName() const override;
+    QString deviceIdentity() const override;
+    QString statusText() const override;
+    bool hasCalibration() const override { return hasCalibrationProfile_; }
+    TouchAffineTransform currentCalibration() const override { return calibrationTransform_; }
+    void useCalibration(const TouchAffineTransform &transform) override;
+    bool saveCalibration(const TouchAffineTransform &transform, QString *error) override;
+    bool resetCalibration(QString *error) override;
+    void setCalibrationCaptureActive(bool active) override { calibrationCaptureActive_ = active; }
+    void setWindow(QWindow *window) { window_ = window; }
 
     Q_INVOKABLE bool start(const QString &devicePath = {});
     Q_INVOKABLE void stop();
@@ -36,6 +48,10 @@ public:
 signals:
     void activeChanged();
     void devicePathChanged();
+    void calibrationChanged();
+    void rawTouchPressed(const QPointF &position);
+    void rawTouchMoved(const QPointF &position);
+    void rawTouchReleased(const QPointF &position);
 
 private slots:
     void onSystemWake(bool suspending);
@@ -145,6 +161,7 @@ private:
         InputState &state, quint16 type, quint16 code, qint32 value);
     static TouchUpdate cancelInput(InputState &state);
     QPointF normalizedPosition(const TouchUpdate &update) const;
+    void dispatchTouchUpdate(const TouchUpdate &update);
     QString detectDevice();
     bool openDevice(const QString &path);
     void closeDevice();
@@ -178,6 +195,8 @@ private:
     int absYMax_ = 1;
 
     TouchAffineTransform calibrationTransform_;
+    bool hasCalibrationProfile_ = false;
+    bool calibrationCaptureActive_ = false;
 
     InputState inputState_;
 };

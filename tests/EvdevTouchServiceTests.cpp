@@ -1,4 +1,5 @@
 #include <QFile>
+#include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
@@ -43,6 +44,9 @@ private slots:
     void cancellingInputReleasesAnActivePress();
     void mapsPressMoveReleaseAndCancellationThroughCalibration();
     void loadsCalibrationProfileForSelectedStableIdentity();
+    void emitsUncalibratedRawCoordinatesForCalibration();
+    void exposesCalibrationDeviceStateAndPersistence();
+    void calibrationPathHonorsIsolatedConfigDirectory();
 };
 
 void EvdevTouchServiceTests::enumeratesAllEventNodes()
@@ -622,6 +626,75 @@ void EvdevTouchServiceTests::loadsCalibrationProfileForSelectedStableIdentity()
 
     QCOMPARE(service.normalizedPosition({EvdevTouchService::TouchAction::Press, 25, 75}),
              QPointF(0.25, 0.25));
+}
+
+void EvdevTouchServiceTests::emitsUncalibratedRawCoordinatesForCalibration()
+{
+    EvdevTouchService service(nullptr);
+    service.absXMin_ = 0;
+    service.absXMax_ = 100;
+    service.absYMin_ = 0;
+    service.absYMax_ = 100;
+    service.calibrationTransform_ = TouchAffineTransform::rotation(90);
+    QSignalSpy pressedSpy(&service, &EvdevTouchService::rawTouchPressed);
+
+    service.dispatchTouchUpdate({EvdevTouchService::TouchAction::Press, 25, 75});
+
+    QCOMPARE(pressedSpy.size(), 1);
+    QCOMPARE(pressedSpy.first().at(0).toPointF(), QPointF(0.25, 0.75));
+}
+
+void EvdevTouchServiceTests::exposesCalibrationDeviceStateAndPersistence()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    QFile activeDevice(directory.filePath(QStringLiteral("event-test")));
+    QVERIFY(activeDevice.open(QIODevice::ReadWrite));
+
+    EvdevTouchService service(nullptr);
+    service.fd_ = ::dup(activeDevice.handle());
+    QVERIFY(service.fd_ >= 0);
+    service.devicePath_ = activeDevice.fileName();
+    service.selectedIdentity_ = {3, 0x1234, 0x5678, 1,
+                                 QStringLiteral("Xeneon Edge Touchscreen"),
+                                 QStringLiteral("usb-test/input0")};
+    service.calibrationStoragePath_ = directory.filePath(QStringLiteral("touch-calibration.json"));
+    const QString stableIdentity = stableTouchscreenIdentity(
+        3, 0x1234, 0x5678, 1, QStringLiteral("Xeneon Edge Touchscreen"),
+        QStringLiteral("usb-test/input0"));
+
+    QVERIFY(service.isAvailable());
+    QCOMPARE(service.deviceName(), QStringLiteral("Xeneon Edge Touchscreen"));
+    QCOMPARE(service.deviceIdentity(), stableIdentity);
+    QCOMPARE(service.statusText(), QStringLiteral("Direct touch input active"));
+    QVERIFY(!service.hasCalibration());
+
+    QString error;
+    QVERIFY2(service.saveCalibration(TouchAffineTransform::rotation(90), &error),
+             qPrintable(error));
+    QVERIFY(service.hasCalibration());
+    QVERIFY(TouchCalibrationStore(service.calibrationStoragePath_).hasProfile(stableIdentity));
+
+    QVERIFY2(service.resetCalibration(&error), qPrintable(error));
+    QVERIFY(!service.hasCalibration());
+    QVERIFY(!TouchCalibrationStore(service.calibrationStoragePath_).hasProfile(stableIdentity));
+}
+
+void EvdevTouchServiceTests::calibrationPathHonorsIsolatedConfigDirectory()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QByteArray previousOverride = qgetenv("CIDERDECK_CONFIG_DIR");
+    qputenv("CIDERDECK_CONFIG_DIR", directory.path().toUtf8());
+
+    EvdevTouchService service(nullptr);
+
+    if (previousOverride.isNull())
+        qunsetenv("CIDERDECK_CONFIG_DIR");
+    else
+        qputenv("CIDERDECK_CONFIG_DIR", previousOverride);
+    QCOMPARE(service.calibrationStoragePath_,
+             directory.filePath(QStringLiteral("touch-calibration.json")));
 }
 
 } // namespace ciderdeck

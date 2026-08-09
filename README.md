@@ -50,7 +50,10 @@ The screenshot tile invokes whichever KDE global action is assigned to
 application.
 
 Direct touchscreen input reads Linux evdev devices. The user running CiderDeck
-must have permission to open the Xeneon Edge device under `/dev/input`.
+must have permission to open the Xeneon Edge device under `/dev/input`. General
+Settings shows the detected device, direct-input status, and a five-point
+calibration action. Calibration is previewed before it is saved; Cancel restores
+the previous mapping, while Reset requires a second confirmation tap.
 
 ## Build
 
@@ -77,6 +80,7 @@ files are:
 ```text
 ~/.config/ciderdeck/config.json
 ~/.config/ciderdeck/mixer.json
+~/.config/ciderdeck/touch-calibration.json
 ```
 
 To keep development settings separate from an installed dashboard, use the
@@ -104,7 +108,7 @@ systemctl --user start app-ciderdeck@autostart.service
 
 | Variable | Purpose |
 |---|---|
-| `CIDERDECK_CONFIG_DIR` | Overrides the directory containing `config.json` and `mixer.json`. |
+| `CIDERDECK_CONFIG_DIR` | Overrides the directory containing `config.json`, `mixer.json`, and `touch-calibration.json`. |
 | `CIDERDECK_PREVIEW` | Uses the preview application name and display name when set. |
 | `CIDERDECK_PREVIEW_PAGE` | Selects the initial zero-based page index for preview captures. |
 | `CIDERDECK_KWIN_SCRIPT` | Overrides the path to the KWin bridge JavaScript file. |

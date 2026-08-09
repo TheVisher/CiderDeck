@@ -364,30 +364,10 @@ bool readProfiles(const QString &path, QMap<QString, TouchAffineTransform> *prof
     return true;
 }
 
-} // namespace
-
-TouchAffineTransform TouchCalibrationStore::profileFor(
-    const QString &stableDeviceIdentity, QString *error) const
+bool writeProfiles(const QString &path,
+                   const QMap<QString, TouchAffineTransform> &profiles,
+                   QString *error)
 {
-    QMap<QString, TouchAffineTransform> profiles;
-    if (!readProfiles(storagePath_, &profiles, error))
-        return TouchAffineTransform::identity();
-    return profiles.value(stableDeviceIdentity, TouchAffineTransform::identity());
-}
-
-bool TouchCalibrationStore::saveProfile(const QString &stableDeviceIdentity,
-                                        const TouchAffineTransform &transform, QString *error) const
-{
-    if (stableDeviceIdentity.isEmpty() || !transform.isValid()) {
-        if (error)
-            *error = QStringLiteral("A stable device identity and finite coefficients are required");
-        return false;
-    }
-    QMap<QString, TouchAffineTransform> profiles;
-    if (!readProfiles(storagePath_, &profiles, error))
-        return false;
-    profiles.insert(stableDeviceIdentity, transform);
-
     QJsonArray serializedProfiles;
     for (auto it = profiles.cbegin(); it != profiles.cend(); ++it) {
         QJsonArray coefficients;
@@ -402,12 +382,12 @@ bool TouchCalibrationStore::saveProfile(const QString &stableDeviceIdentity,
         {QStringLiteral("version"), 1},
         {QStringLiteral("profiles"), serializedProfiles},
     });
-    if (!QDir().mkpath(QFileInfo(storagePath_).absolutePath())) {
+    if (!QDir().mkpath(QFileInfo(path).absolutePath())) {
         if (error)
             *error = QStringLiteral("Could not create touchscreen calibration directory");
         return false;
     }
-    QSaveFile file(storagePath_);
+    QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly) || file.write(document.toJson(QJsonDocument::Indented)) < 0
         || !file.commit()) {
         if (error)
@@ -417,6 +397,58 @@ bool TouchCalibrationStore::saveProfile(const QString &stableDeviceIdentity,
     if (error)
         error->clear();
     return true;
+}
+
+} // namespace
+
+TouchAffineTransform TouchCalibrationStore::profileFor(
+    const QString &stableDeviceIdentity, QString *error) const
+{
+    QMap<QString, TouchAffineTransform> profiles;
+    if (!readProfiles(storagePath_, &profiles, error))
+        return TouchAffineTransform::identity();
+    return profiles.value(stableDeviceIdentity, TouchAffineTransform::identity());
+}
+
+bool TouchCalibrationStore::hasProfile(const QString &stableDeviceIdentity, QString *error) const
+{
+    QMap<QString, TouchAffineTransform> profiles;
+    if (!readProfiles(storagePath_, &profiles, error))
+        return false;
+    return profiles.contains(stableDeviceIdentity);
+}
+
+bool TouchCalibrationStore::saveProfile(const QString &stableDeviceIdentity,
+                                        const TouchAffineTransform &transform, QString *error) const
+{
+    if (stableDeviceIdentity.isEmpty() || !transform.isValid()) {
+        if (error)
+            *error = QStringLiteral("A stable device identity and finite coefficients are required");
+        return false;
+    }
+    QMap<QString, TouchAffineTransform> profiles;
+    if (!readProfiles(storagePath_, &profiles, error))
+        return false;
+    profiles.insert(stableDeviceIdentity, transform);
+    return writeProfiles(storagePath_, profiles, error);
+}
+
+bool TouchCalibrationStore::removeProfile(const QString &stableDeviceIdentity, QString *error) const
+{
+    if (stableDeviceIdentity.isEmpty()) {
+        if (error)
+            *error = QStringLiteral("A stable device identity is required");
+        return false;
+    }
+    QMap<QString, TouchAffineTransform> profiles;
+    if (!readProfiles(storagePath_, &profiles, error))
+        return false;
+    if (profiles.remove(stableDeviceIdentity) == 0) {
+        if (error)
+            error->clear();
+        return true;
+    }
+    return writeProfiles(storagePath_, profiles, error);
 }
 
 } // namespace ciderdeck

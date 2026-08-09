@@ -32,6 +32,7 @@ Window {
     property var contentItemValueValidator: null
     property string contentValidatorOwner: ""
     property string contentEditConstraint: ""
+    property bool keyboardInteractivityEnabled: false
 
     function beginContentEdit(tileId, initialElement) {
         editController.exitEditMode()
@@ -63,10 +64,23 @@ Window {
     }
 
     function syncKeyboardInteractivity() {
-        deckApp.setKeyboardEnabled(editController.editing
-                                   || settingsPanel.isOpen
-                                   || updateService.terminalActive)
+        var enabled = editController.editing
+            || settingsPanel.isOpen
+            || updateService.terminalActive
+            || touchCalibrationService.active
+        if (enabled === root.keyboardInteractivityEnabled)
+            return
+        root.keyboardInteractivityEnabled = enabled
+        deckApp.setKeyboardEnabled(enabled)
     }
+
+    // Keep the dashboard inert and out of the accessibility tree while the
+    // window-level calibration popup owns interaction.
+    Item {
+        id: applicationContent
+        anchors.fill: parent
+        enabled: !touchCalibrationService.active
+        Accessible.ignored: touchCalibrationService.active
 
     // Background touch area for context menu and edit mode exit
     MouseArea {
@@ -94,7 +108,8 @@ Window {
     // currently owns QML focus.
     Shortcut {
         sequence: "Esc"
-        enabled: root.contentEditTileId !== "" || settingsPanel.isOpen || editController.editing
+        enabled: (root.contentEditTileId !== "" || settingsPanel.isOpen || editController.editing)
+                 && !touchCalibrationService.active
         context: Qt.WindowShortcut
         onActivated: {
             if (root.contentEditTileId !== "")
@@ -283,6 +298,13 @@ Window {
         }
     }
 
+    Connections {
+        target: touchCalibrationService
+        function onStateChanged() {
+            root.syncKeyboardInteractivity()
+        }
+    }
+
     // Context menu
     ContextMenu {
         id: contextMenu
@@ -295,5 +317,15 @@ Window {
         onIsOpenChanged: {
             root.syncKeyboardInteractivity()
         }
+    }
+
+    }
+
+    TouchCalibrationWizard {
+        x: 0
+        y: 0
+        width: root.width
+        height: root.height
+        z: 400
     }
 }
