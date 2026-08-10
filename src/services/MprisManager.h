@@ -1,12 +1,33 @@
 #pragma once
 
 #include <QObject>
-#include <QDBusInterface>
+#include <QMap>
+#include <QSet>
 #include <QTimer>
 #include <QStringList>
 #include <QVariantMap>
 
+#include <functional>
+
 namespace ciderdeck {
+
+class MprisPropertiesRelay : public QObject {
+    Q_OBJECT
+
+public:
+    explicit MprisPropertiesRelay(QString service, QObject *parent = nullptr);
+
+signals:
+    void propertiesChanged(const QString &service, const QString &interface,
+                           const QVariantMap &changed, const QStringList &invalidated);
+
+private slots:
+    void forwardPropertiesChanged(const QString &interface, const QVariantMap &changed,
+                                  const QStringList &invalidated);
+
+private:
+    QString service_;
+};
 
 class MprisManager : public QObject {
     Q_OBJECT
@@ -56,6 +77,13 @@ public:
     int playerCount() const { return playerNames_.size(); }
     static QString resolvePreferredPlayer(const QStringList &availablePlayers,
                                           const QString &preferredPlayer);
+    static QString resolveAutoPlayer(const QStringList &availablePlayers,
+                                     const QMap<QString, QString> &playbackStatuses,
+                                     const QString &currentPlayer);
+    static bool isCurrentService(const QString &sourceService, const QString &currentService);
+    static bool isCurrentRequest(const QString &requestService, const QString &currentService,
+                                 quint64 requestGeneration, quint64 currentGeneration,
+                                 quint64 requestId, quint64 latestRequestId);
     static qlonglong resolveDuration(const QVariantMap &metadata,
                                      const QString &previousIdentity,
                                      qlonglong previousDuration);
@@ -68,13 +96,14 @@ public:
     Q_INVOKABLE void selectNextPlayer();
     Q_INVOKABLE void selectPreviousPlayer();
     Q_INVOKABLE void selectPreferredPlayer(const QString &name);
+    Q_INVOKABLE void applyPreferredPlayer(const QString &name);
     Q_INVOKABLE void toggleShuffle();
     Q_INVOKABLE void cycleLoopStatus();
     Q_INVOKABLE void skipForward(int seconds);
     Q_INVOKABLE void skipBackward(int seconds);
 
     Q_PROPERTY(QString desktopEntry READ desktopEntry NOTIFY currentPlayerChanged)
-    QString desktopEntry() const;
+    QString desktopEntry() const { return desktopEntry_; }
 
 signals:
     void playersChanged();
@@ -87,22 +116,46 @@ signals:
 private slots:
     void onNameOwnerChanged(const QString &service, const QString &oldOwner, const QString &newOwner);
     void pollPosition();
-    void onPropertiesChanged(const QString &interface, const QVariantMap &changed, const QStringList &invalidated);
 
 private:
     void discoverPlayers();
+    void updateDiscoveredPlayers(const QStringList &services);
     void selectBestPlayer();
+    void registerPlayer(const QString &name, const QString &service);
+    void unregisterPlayer(const QString &name);
+    void refreshAutoSelection();
+    void settleAutoSelectionProbe(const QString &service, quint64 generation);
+    void finishAutoSelectionRefresh(quint64 generation);
+    void cancelAutoSelectionRefresh();
+    void handlePropertiesChanged(const QString &service, const QString &interface,
+                                 const QVariantMap &changed, const QStringList &invalidated);
     void fetchMetadata();
     void fetchPlaybackStatus();
+    void fetchPosition();
     void fetchControls();
+    void fetchDesktopEntry();
+    void requestProperty(const QString &service, const QString &property,
+                         const std::function<void(const QVariant &)> &handler);
+    void resetPlayerState();
     QString serviceName() const;
-    QDBusInterface *playerInterface();
 
     QTimer *positionTimer_ = nullptr;
 
     QStringList playerNames_;
     QString currentPlayer_;
     QMap<QString, QString> serviceMap_; // display name -> dbus service
+    QMap<QString, QString> playbackStatuses_;
+    QMap<QString, MprisPropertiesRelay *> propertyRelays_;
+    bool autoSelection_ = true;
+    quint64 selectionGeneration_ = 0;
+    quint64 nextRequestId_ = 0;
+    QMap<QString, quint64> latestRequestIds_;
+    QMap<QString, quint64> latestAutoStatusRequestIds_;
+    quint64 autoSelectionGeneration_ = 0;
+    QSet<QString> pendingAutoSelectionServices_;
+    QString autoSelectionStartPlayer_;
+    bool autoSelectionRefreshActive_ = false;
+    bool autoSelectionDeadlineReached_ = false;
 
     // Metadata
     QString title_;
@@ -110,6 +163,7 @@ private:
     QString album_;
     QString artUrl_;
     QString trackId_;
+    QString desktopEntry_;
     QString metadataIdentity_;
     QString playbackStatus_;
     qlonglong position_ = 0;

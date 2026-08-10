@@ -15,6 +15,7 @@ Item {
     property real tileOpacityValue
     property real tileBlurLevelValue
     property var tileSettingsValue
+    property bool monitoringActive: false
 
     // Grid properties
     property int gridGap
@@ -104,6 +105,7 @@ Item {
         property real tileHeight: tileLoader.height
         property real cardOpacity: tileLoader.effectiveOpacity
         property real contentScale: tileLoader.contentScaleValue
+        property bool monitoringActive: tileLoader.monitoringActive
         property bool contentEditMode: root.contentEditTileId === tileLoader.tileIdValue
         property string selectedContentElement: root.contentEditElement
     }

@@ -6,11 +6,13 @@ Card {
 
     property string sizeClass: parent ? parent.sizeClass : "small"
     property var settings: parent ? parent.settings : ({})
+    readonly property bool monitoringActive: parent ? parent.monitoringActive : false
     readonly property real contentScale: parent ? (parent.contentScale || 1.0) : 1.0
     readonly property string monitorMode: settings.monitorMode || "overview"
     readonly property bool showGraph: settings.showGraph !== false
     readonly property bool showDetails: settings.showDetails !== false
     readonly property bool showBar: settings.showBar !== false
+    readonly property int metricTransitionDuration: 900
 
     readonly property color metricColor: {
         switch (monitorMode) {
@@ -53,6 +55,16 @@ Card {
         default: return 0
         }
     }
+    property real displayedMetricPercent: metricPercent
+
+    Behavior on displayedMetricPercent {
+        enabled: sysmonTile.monitoringActive
+
+        NumberAnimation {
+            duration: sysmonTile.metricTransitionDuration
+            easing.type: Easing.OutCubic
+        }
+    }
 
     readonly property var metricHistory: {
         switch (monitorMode) {
@@ -67,6 +79,18 @@ Card {
 
     function temperature(value) {
         return value > 0 ? Math.round(value) + "°C" : "--"
+    }
+
+    Component.onCompleted: systemMonitor.setConsumerActive(sysmonTile, sysmonTile.monitoringActive)
+    onMonitoringActiveChanged: systemMonitor.setConsumerActive(sysmonTile, sysmonTile.monitoringActive)
+
+    ListModel {
+        id: overviewMetricModel
+
+        ListElement { metricKey: "cpu"; metricLabel: "CPU" }
+        ListElement { metricKey: "gpu"; metricLabel: "GPU" }
+        ListElement { metricKey: "memory"; metricLabel: "MEMORY" }
+        ListElement { metricKey: "storage"; metricLabel: "STORAGE" }
     }
 
     Item {
@@ -130,7 +154,7 @@ Card {
                 spacing: 12
 
                 Text {
-                    text: Math.round(sysmonTile.metricPercent) + "%"
+                    text: Math.round(sysmonTile.displayedMetricPercent) + "%"
                     color: themeManager.textColor
                     font.pixelSize: 40 * sysmonTile.contentScale
                     font.weight: Font.DemiBold
@@ -182,11 +206,10 @@ Card {
                 visible: sysmonTile.showBar
 
                 Rectangle {
-                    width: parent.width * Math.max(0, Math.min(1, sysmonTile.metricPercent / 100))
+                    width: parent.width * Math.max(0, Math.min(1, sysmonTile.displayedMetricPercent / 100))
                     height: parent.height
                     radius: parent.radius
                     color: sysmonTile.metricPercent >= 90 ? themeManager.errorColor : sysmonTile.metricColor
-                    Behavior on width { NumberAnimation { duration: 250 } }
                 }
             }
 
@@ -197,6 +220,7 @@ Card {
                 values: sysmonTile.metricHistory
                 maxValue: 100
                 lineColor: sysmonTile.metricColor
+                presentationActive: sysmonTile.monitoringActive && sysmonTile.showGraph && sysmonTile.sizeClass !== "tiny"
                 visible: sysmonTile.showGraph && sysmonTile.sizeClass !== "tiny"
             }
 
@@ -267,6 +291,7 @@ Card {
                 values: systemMonitor.downloadHistory
                 maxValue: 0
                 lineColor: "#62d2a2"
+                presentationActive: sysmonTile.monitoringActive && sysmonTile.showGraph
                 visible: sysmonTile.showGraph
             }
 
@@ -290,32 +315,77 @@ Card {
             columnSpacing: 16
 
             Repeater {
-                model: [
-                    { label: "CPU", value: Math.round(systemMonitor.cpuPercent) + "%", detail: sysmonTile.temperature(systemMonitor.cpuTemp), percent: systemMonitor.cpuPercent, history: systemMonitor.cpuHistory, color: themeManager.accentColor },
-                    { label: "GPU", value: Math.round(systemMonitor.gpuPercent) + "%", detail: sysmonTile.temperature(systemMonitor.gpuTemp), percent: systemMonitor.gpuPercent, history: systemMonitor.gpuHistory, color: "#76b900" },
-                    { label: "MEMORY", value: Math.round(systemMonitor.ramPercent) + "%", detail: systemMonitor.ramUsed, percent: systemMonitor.ramPercent, history: systemMonitor.ramHistory, color: "#f2c14e" },
-                    { label: "STORAGE", value: Math.round(systemMonitor.storagePercent) + "%", detail: systemMonitor.storageFree + " free", percent: systemMonitor.storagePercent, history: systemMonitor.storageHistory, color: "#50c8d8" }
-                ]
+                model: overviewMetricModel
 
                 delegate: ColumnLayout {
-                    required property var modelData
+                    id: overviewMetric
+
+                    required property string metricKey
+                    required property string metricLabel
+                    readonly property real rawPercent: {
+                        switch (metricKey) {
+                        case "cpu": return systemMonitor.cpuPercent
+                        case "gpu": return systemMonitor.gpuPercent
+                        case "memory": return systemMonitor.ramPercent
+                        case "storage": return systemMonitor.storagePercent
+                        default: return 0
+                        }
+                    }
+                    property real displayedPercent: rawPercent
+                    readonly property string metricDetail: {
+                        switch (metricKey) {
+                        case "cpu": return sysmonTile.temperature(systemMonitor.cpuTemp)
+                        case "gpu": return sysmonTile.temperature(systemMonitor.gpuTemp)
+                        case "memory": return systemMonitor.ramUsed
+                        case "storage": return systemMonitor.storageFree + " free"
+                        default: return ""
+                        }
+                    }
+                    readonly property var metricHistory: {
+                        switch (metricKey) {
+                        case "cpu": return systemMonitor.cpuHistory
+                        case "gpu": return systemMonitor.gpuHistory
+                        case "memory": return systemMonitor.ramHistory
+                        case "storage": return systemMonitor.storageHistory
+                        default: return []
+                        }
+                    }
+                    readonly property color metricColor: {
+                        switch (metricKey) {
+                        case "cpu": return themeManager.accentColor
+                        case "gpu": return "#76b900"
+                        case "memory": return "#f2c14e"
+                        case "storage": return "#50c8d8"
+                        default: return themeManager.accentColor
+                        }
+                    }
+
+                    Behavior on displayedPercent {
+                        enabled: sysmonTile.monitoringActive
+
+                        NumberAnimation {
+                            duration: sysmonTile.metricTransitionDuration
+                            easing.type: Easing.OutCubic
+                        }
+                    }
+
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     spacing: 4
 
                     Text {
-                        text: modelData.label
+                        text: metricLabel
                         color: themeManager.secondaryTextColor
                         font.pixelSize: 10 * sysmonTile.contentScale
                     }
                     Text {
-                        text: modelData.value
-                        color: modelData.color
+                        text: Math.round(displayedPercent) + "%"
+                        color: metricColor
                         font.pixelSize: 30 * sysmonTile.contentScale
                         font.weight: Font.DemiBold
                     }
                     Text {
-                        text: modelData.detail
+                        text: metricDetail
                         color: themeManager.secondaryTextColor
                         font.pixelSize: 11 * sysmonTile.contentScale
                         visible: sysmonTile.showDetails
@@ -329,10 +399,10 @@ Card {
                         visible: sysmonTile.showBar
 
                         Rectangle {
-                            width: parent.width * Math.max(0, Math.min(1, modelData.percent / 100))
+                            width: parent.width * Math.max(0, Math.min(1, displayedPercent / 100))
                             height: parent.height
                             radius: parent.radius
-                            color: modelData.color
+                            color: metricColor
                         }
                     }
 
@@ -340,9 +410,10 @@ Card {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         Layout.minimumHeight: 36
-                        values: modelData.history
+                        values: metricHistory
                         maxValue: 100
-                        lineColor: modelData.color
+                        lineColor: metricColor
+                        presentationActive: sysmonTile.monitoringActive && sysmonTile.showGraph
                         visible: sysmonTile.showGraph
                     }
                 }

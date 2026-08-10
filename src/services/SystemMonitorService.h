@@ -2,6 +2,7 @@
 
 #include <QElapsedTimer>
 #include <QObject>
+#include <QSet>
 #include <QTimer>
 #include <QVariantList>
 
@@ -103,11 +104,16 @@ public:
     QVariantList downloadHistory() const { return downloadHistory_; }
     QVariantList uploadHistory() const { return uploadHistory_; }
 
+    Q_INVOKABLE void setConsumerActive(QObject *consumer, bool active);
+
 signals:
     void updated();
 
+protected:
+    virtual void poll();
+
 private:
-    void poll();
+    void consumerDestroyed(QObject *consumer);
     void readCpu();
     void readCpuDetails();
     void readMemory();
@@ -123,6 +129,8 @@ private:
     QTimer *timer_ = nullptr;
     QProcess *gpuProcess_ = nullptr;
     QElapsedTimer networkTimer_;
+    QSet<QObject *> activeConsumers_;
+    QSet<QObject *> trackedConsumers_;
 
     double cpuPercent_ = 0.0;
     double cpuTemp_ = 0.0;

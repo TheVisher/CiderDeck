@@ -1806,8 +1806,11 @@ Flickable {
                         }
                         return 0
                     }
-                    onActivated: (index) => tileSettings.saveSetting(
-                        "preferredPlayer", index === 0 ? "" : model[index])
+                    onActivated: (index) => {
+                        var player = index === 0 ? "" : model[index]
+                        mprisManager.selectPreferredPlayer(player)
+                        tileSettings.saveSetting("preferredPlayer", player)
+                    }
                     implicitWidth: 180
                 }
             }

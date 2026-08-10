@@ -11,6 +11,7 @@ Item {
     required property real cellWidth
     required property real cellHeight
     property int tileRevision: 0
+    readonly property bool activePage: pageIndex === deckConfig.currentPage
     readonly property var pageTiles: {
         tileRevision
         return deckConfig.tilesForPage(pageIndex)
@@ -39,6 +40,7 @@ Item {
             tileOpacityValue: modelData.opacity !== undefined ? modelData.opacity : -1
             tileBlurLevelValue: modelData.blurLevel !== undefined ? modelData.blurLevel : -1
             tileSettingsValue: modelData.settings || ({})
+            monitoringActive: page.activePage
 
             gridGap: page.gridGap
             gridPadding: page.gridPadding

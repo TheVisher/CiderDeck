@@ -221,7 +221,31 @@ if(BUILD_TESTING)
     Qt6::DBus
     Qt6::Test
   )
-  add_test(NAME ciderdeck-service-settings-tests COMMAND ciderdeck-service-settings-tests)
+  find_program(DBUS_RUN_SESSION_EXECUTABLE NAMES dbus-run-session)
+  if(DBUS_RUN_SESSION_EXECUTABLE)
+    add_test(NAME ciderdeck-service-settings-tests
+      COMMAND "${DBUS_RUN_SESSION_EXECUTABLE}" -- "$<TARGET_FILE:ciderdeck-service-settings-tests>")
+  else()
+    add_test(NAME ciderdeck-service-settings-tests COMMAND ciderdeck-service-settings-tests)
+  endif()
+
+  add_executable(ciderdeck-monitoring-activity-tests
+    tests/MonitoringActivityTests.cpp
+    src/services/SystemMonitorService.h
+    src/services/SystemMonitorService.cpp
+    src/services/ProcessManagerService.h
+    src/services/ProcessManagerService.cpp
+    src/services/KWinDBusClient.h
+    src/services/KWinDBusClient.cpp
+  )
+  target_include_directories(ciderdeck-monitoring-activity-tests PRIVATE src)
+  target_link_libraries(ciderdeck-monitoring-activity-tests PRIVATE
+    Qt6::Core
+    Qt6::DBus
+    Qt6::Test
+  )
+  add_test(NAME ciderdeck-monitoring-activity-tests
+    COMMAND ciderdeck-monitoring-activity-tests)
 
   add_executable(ciderdeck-audio-mixer-tests
     tests/AudioMixerServiceTests.cpp
@@ -307,10 +331,33 @@ if(BUILD_TESTING)
     )
   endif()
 
+  if(TARGET Qt6::qmltestrunner)
+    add_test(NAME ciderdeck-metric-sparkline-qml-tests
+      COMMAND Qt6::qmltestrunner
+        -input "${CMAKE_CURRENT_SOURCE_DIR}/tests/qml/tst_MetricSparkline.qml"
+        -import "${CMAKE_CURRENT_SOURCE_DIR}/src/qml"
+    )
+    set_tests_properties(ciderdeck-metric-sparkline-qml-tests PROPERTIES
+      ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
+    )
+  endif()
+
   add_test(NAME ciderdeck-tile-scale-contract
     COMMAND "${CMAKE_COMMAND}"
       "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
       -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/VerifyTileContentScale.cmake"
+  )
+
+  add_test(NAME ciderdeck-monitoring-activity-contract
+    COMMAND "${CMAKE_COMMAND}"
+      "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+      -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/VerifyMonitoringActivityWiring.cmake"
+  )
+
+  add_test(NAME ciderdeck-system-monitor-smoothing-contract
+    COMMAND "${CMAKE_COMMAND}"
+      "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+      -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/VerifySystemMonitorSmoothing.cmake"
   )
 
   add_test(NAME ciderdeck-qt65-compatibility-contract

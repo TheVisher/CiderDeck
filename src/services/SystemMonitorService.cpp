@@ -38,8 +38,41 @@ SystemMonitorService::SystemMonitorService(QObject *parent)
 
     readHardwareNames();
     networkTimer_.start();
-    poll();
-    timer_->start();
+}
+
+void SystemMonitorService::setConsumerActive(QObject *consumer, bool active) {
+    if (!consumer)
+        return;
+
+    if (active) {
+        if (activeConsumers_.contains(consumer))
+            return;
+
+        if (!trackedConsumers_.contains(consumer)) {
+            trackedConsumers_.insert(consumer);
+            connect(consumer, &QObject::destroyed,
+                    this, &SystemMonitorService::consumerDestroyed);
+        }
+
+        const bool firstConsumer = activeConsumers_.isEmpty();
+        activeConsumers_.insert(consumer);
+        if (firstConsumer) {
+            poll();
+            timer_->start();
+        }
+        return;
+    }
+
+    if (!activeConsumers_.remove(consumer))
+        return;
+    if (activeConsumers_.isEmpty())
+        timer_->stop();
+}
+
+void SystemMonitorService::consumerDestroyed(QObject *consumer) {
+    trackedConsumers_.remove(consumer);
+    if (activeConsumers_.remove(consumer) && activeConsumers_.isEmpty())
+        timer_->stop();
 }
 
 void SystemMonitorService::poll() {

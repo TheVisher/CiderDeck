@@ -10,10 +10,14 @@ Card {
     property var settings: parent ? parent.settings : ({})
     property bool contentEditMode: parent ? parent.contentEditMode : false
     property string selectedElement: parent ? parent.selectedContentElement : ""
+    readonly property bool monitoringActive: parent ? parent.monitoringActive : false
     readonly property real contentScale: parent ? (parent.contentScale || 1.0) : 1.0
     readonly property bool showMemory: settings.showMemory !== false
     readonly property bool allowTerminate: settings.allowTerminate === true
     readonly property int maxProcesses: settings.maxProcesses || 15
+
+    Component.onCompleted: processManager.setConsumerActive(procTile, procTile.monitoringActive)
+    onMonitoringActiveChanged: processManager.setConsumerActive(procTile, procTile.monitoringActive)
 
     Item {
         id: contentCanvas

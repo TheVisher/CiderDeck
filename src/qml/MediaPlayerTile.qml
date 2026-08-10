@@ -92,7 +92,7 @@ Card {
     property real localProgress: 0
 
     function applyPreferredPlayer() {
-        mprisManager.selectPreferredPlayer(preferredPlayer)
+        mprisManager.applyPreferredPlayer(preferredPlayer)
     }
 
     Component.onCompleted: applyPreferredPlayer()
