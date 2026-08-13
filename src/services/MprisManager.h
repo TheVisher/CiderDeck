@@ -1,6 +1,8 @@
 #pragma once
 
 #include <QObject>
+#include <QElapsedTimer>
+#include <QList>
 #include <QMap>
 #include <QSet>
 #include <QTimer>
@@ -20,10 +22,12 @@ public:
 signals:
     void propertiesChanged(const QString &service, const QString &interface,
                            const QVariantMap &changed, const QStringList &invalidated);
+    void seeked(const QString &service, qlonglong position);
 
 private slots:
     void forwardPropertiesChanged(const QString &interface, const QVariantMap &changed,
                                   const QStringList &invalidated);
+    void forwardSeeked(qlonglong position);
 
 private:
     QString service_;
@@ -129,13 +133,22 @@ private:
     void cancelAutoSelectionRefresh();
     void handlePropertiesChanged(const QString &service, const QString &interface,
                                  const QVariantMap &changed, const QStringList &invalidated);
+    void handleSeeked(const QString &service, qlonglong position);
     void fetchMetadata();
     void fetchPlaybackStatus();
-    void fetchPosition();
+    void fetchPosition(bool acceptPlayingZero = false);
     void fetchControls();
     void fetchDesktopEntry();
     void requestProperty(const QString &service, const QString &property,
                          const std::function<void(const QVariant &)> &handler);
+    void sendSeekCommand(const QString &method, const QList<QVariant> &arguments,
+                         qlonglong optimisticPosition);
+    void updatePlaybackStatus(const QString &status);
+    void setPositionEstimate(qlonglong position);
+    void advancePositionEstimate();
+    qlonglong estimatedPosition() const;
+    qlonglong boundedPosition(qlonglong position) const;
+    bool hasValidTrackId() const;
     void resetPlayerState();
     QString serviceName() const;
 
@@ -148,6 +161,8 @@ private:
     QMap<QString, MprisPropertiesRelay *> propertyRelays_;
     bool autoSelection_ = true;
     quint64 selectionGeneration_ = 0;
+    quint64 positionRequestEpoch_ = 0;
+    quint64 acceptPlayingZeroPositionEpoch_ = 0;
     quint64 nextRequestId_ = 0;
     QMap<QString, quint64> latestRequestIds_;
     QMap<QString, quint64> latestAutoStatusRequestIds_;
@@ -168,6 +183,12 @@ private:
     QString playbackStatus_;
     qlonglong position_ = 0;
     qlonglong duration_ = 0;
+    QElapsedTimer positionEstimateTimer_;
+    qlonglong positionEstimateAnchor_ = 0;
+    bool positionEstimateValid_ = false;
+    bool playingPositionEstimateActive_ = false;
+    bool preservePlayingPositionFromZeroPolls_ = false;
+    bool acceptPlayingZeroPosition_ = false;
     bool canGoNext_ = false;
     bool canGoPrevious_ = false;
     bool canPlay_ = false;

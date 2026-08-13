@@ -11,6 +11,7 @@
 #include <QUrlQuery>
 
 #include <algorithm>
+#include <limits>
 #include <utility>
 
 namespace ciderdeck {
@@ -19,6 +20,15 @@ static const QString kMprisPrefix = QStringLiteral("org.mpris.MediaPlayer2.");
 static const QString kPlayerInterface = QStringLiteral("org.mpris.MediaPlayer2.Player");
 static const QString kPropertiesInterface = QStringLiteral("org.freedesktop.DBus.Properties");
 static constexpr int kAutoSelectionDeadlineMs = 500;
+
+static qlonglong saturatingPositionAdd(qlonglong position, qlonglong offset)
+{
+    if (offset > 0 && position > std::numeric_limits<qlonglong>::max() - offset)
+        return std::numeric_limits<qlonglong>::max();
+    if (offset < 0 && position < std::numeric_limits<qlonglong>::min() - offset)
+        return std::numeric_limits<qlonglong>::min();
+    return position + offset;
+}
 
 static void sendAsyncMethod(const QString &service, const QString &interface,
                             const QString &method, const QList<QVariant> &arguments = {})
@@ -48,6 +58,11 @@ void MprisPropertiesRelay::forwardPropertiesChanged(const QString &interface,
                                                      const QStringList &invalidated)
 {
     emit propertiesChanged(service_, interface, changed, invalidated);
+}
+
+void MprisPropertiesRelay::forwardSeeked(qlonglong position)
+{
+    emit seeked(service_, position);
 }
 
 static QString youtubeArtworkUrl(const QString &mediaUrl) {
@@ -163,10 +178,16 @@ void MprisManager::registerPlayer(const QString &name, const QString &service)
     propertyRelays_[service] = relay;
     connect(relay, &MprisPropertiesRelay::propertiesChanged,
             this, &MprisManager::handlePropertiesChanged);
+    connect(relay, &MprisPropertiesRelay::seeked,
+            this, &MprisManager::handleSeeked);
     QDBusConnection::sessionBus().connect(
         service, QStringLiteral("/org/mpris/MediaPlayer2"),
         kPropertiesInterface, QStringLiteral("PropertiesChanged"),
         relay, SLOT(forwardPropertiesChanged(QString,QVariantMap,QStringList)));
+    QDBusConnection::sessionBus().connect(
+        service, QStringLiteral("/org/mpris/MediaPlayer2"),
+        kPlayerInterface, QStringLiteral("Seeked"),
+        relay, SLOT(forwardSeeked(qlonglong)));
 }
 
 void MprisManager::unregisterPlayer(const QString &name)
@@ -201,17 +222,26 @@ QString MprisManager::resolveAutoPlayer(const QStringList &availablePlayers,
                                         const QMap<QString, QString> &playbackStatuses,
                                         const QString &currentPlayer)
 {
-    if (availablePlayers.contains(currentPlayer)
+    QStringList autoPlayers = availablePlayers;
+    const auto isPlayerctld = [](const QString &player) {
+        return player.compare(QStringLiteral("playerctld"), Qt::CaseInsensitive) == 0;
+    };
+    if (std::any_of(autoPlayers.cbegin(), autoPlayers.cend(),
+                    [&isPlayerctld](const QString &player) { return !isPlayerctld(player); })) {
+        autoPlayers.removeIf(isPlayerctld);
+    }
+
+    if (autoPlayers.contains(currentPlayer)
         && playbackStatuses.value(currentPlayer) == QStringLiteral("Playing")) {
         return currentPlayer;
     }
-    for (const QString &player : availablePlayers) {
+    for (const QString &player : autoPlayers) {
         if (playbackStatuses.value(player) == QStringLiteral("Playing"))
             return player;
     }
-    if (availablePlayers.contains(currentPlayer))
+    if (autoPlayers.contains(currentPlayer))
         return currentPlayer;
-    return resolvePreferredPlayer(availablePlayers, QString());
+    return resolvePreferredPlayer(autoPlayers, QString());
 }
 
 bool MprisManager::isCurrentService(const QString &sourceService, const QString &currentService)
@@ -284,6 +314,8 @@ void MprisManager::setCurrentPlayer(const QString &name) {
 
 void MprisManager::resetPlayerState()
 {
+    ++positionRequestEpoch_;
+    acceptPlayingZeroPosition_ = false;
     latestRequestIds_.clear();
     title_.clear();
     artist_.clear();
@@ -295,6 +327,10 @@ void MprisManager::resetPlayerState()
     playbackStatus_ = QStringLiteral("Stopped");
     position_ = 0;
     duration_ = 0;
+    positionEstimateAnchor_ = 0;
+    positionEstimateValid_ = true;
+    playingPositionEstimateActive_ = false;
+    preservePlayingPositionFromZeroPolls_ = false;
     canGoNext_ = false;
     canGoPrevious_ = false;
     canPlay_ = false;
@@ -306,6 +342,18 @@ void MprisManager::resetPlayerState()
     emit playbackStatusChanged();
     emit positionChanged();
     emit controlsChanged();
+}
+
+void MprisManager::handleSeeked(const QString &service, qlonglong position)
+{
+    if (!isCurrentService(service, serviceName())) return;
+    ++positionRequestEpoch_;
+    acceptPlayingZeroPosition_ = false;
+    latestRequestIds_[QStringLiteral("Position")] = ++nextRequestId_;
+    const qlonglong boundedPosition = this->boundedPosition(position);
+    preservePlayingPositionFromZeroPolls_ = playbackStatus_ == QStringLiteral("Playing")
+        && boundedPosition > 0;
+    setPositionEstimate(boundedPosition);
 }
 
 void MprisManager::refreshAutoSelection()
@@ -513,17 +561,11 @@ void MprisManager::handlePropertiesChanged(const QString &service,
 
     if (changed.contains(QStringLiteral("PlaybackStatus"))) {
         const QString newStatus = changed[QStringLiteral("PlaybackStatus")].toString();
-        if (playbackStatus_ != newStatus) {
-            playbackStatus_ = newStatus;
-            emit playbackStatusChanged();
-        }
-        if (newStatus == QStringLiteral("Paused"))
+        updatePlaybackStatus(newStatus);
+        if (newStatus != QStringLiteral("Playing"))
             fetchPosition();
     } else if (playbackInvalidated) {
-        if (playbackStatus_ != QStringLiteral("Stopped")) {
-            playbackStatus_ = QStringLiteral("Stopped");
-            emit playbackStatusChanged();
-        }
+        updatePlaybackStatus(QStringLiteral("Stopped"));
         fetchPlaybackStatus();
     }
 
@@ -563,12 +605,27 @@ void MprisManager::handlePropertiesChanged(const QString &service,
 }
 
 void MprisManager::fetchMetadata() {
-    requestProperty(serviceName(), QStringLiteral("Metadata"), [this](const QVariant &value) {
+    const quint64 positionEpoch = positionRequestEpoch_;
+    requestProperty(serviceName(), QStringLiteral("Metadata"), [this, positionEpoch](const QVariant &value) {
         const QVariantMap metadata = qdbus_cast<QVariantMap>(value.value<QDBusArgument>());
         const QString newIdentity = metadata.value("mpris:trackid").toString()
             + u'\n' + metadata.value("xesam:url").toString()
             + u'\n' + metadata.value("xesam:title").toString();
         const qlonglong newDuration = resolveDuration(metadata, metadataIdentity_, duration_);
+        const bool identityChanged = !metadataIdentity_.isEmpty()
+            && newIdentity != metadataIdentity_;
+        if (identityChanged && positionEpoch == positionRequestEpoch_) {
+            ++positionRequestEpoch_;
+            acceptPlayingZeroPosition_ = false;
+            latestRequestIds_[QStringLiteral("Position")] = ++nextRequestId_;
+            positionEstimateValid_ = false;
+            playingPositionEstimateActive_ = false;
+            preservePlayingPositionFromZeroPolls_ = false;
+            if (position_ != 0) {
+                position_ = 0;
+                emit positionChanged();
+            }
+        }
 
         title_ = metadata.value("xesam:title").toString();
         album_ = metadata.value("xesam:album").toString();
@@ -593,13 +650,10 @@ void MprisManager::fetchPlaybackStatus() {
         const QString newStatus = value.toString();
         const QString player = currentPlayer_;
         playbackStatuses_[player] = newStatus;
-        if (playbackStatus_ != newStatus) {
-            playbackStatus_ = newStatus;
-            emit playbackStatusChanged();
-        }
+        updatePlaybackStatus(newStatus);
         if (autoSelection_ && !autoSelectionRefreshActive_)
             selectBestPlayer();
-        if (currentPlayer_ == player && newStatus == QStringLiteral("Paused"))
+        if (currentPlayer_ == player && newStatus != QStringLiteral("Playing"))
             fetchPosition();
     });
 }
@@ -644,18 +698,121 @@ void MprisManager::fetchControls() {
 
 void MprisManager::pollPosition() {
     if (currentPlayer_.isEmpty() || playbackStatus_ != "Playing") return;
+    advancePositionEstimate();
     fetchPosition();
 }
 
-void MprisManager::fetchPosition()
+void MprisManager::fetchPosition(bool acceptPlayingZero)
 {
-    requestProperty(serviceName(), QStringLiteral("Position"), [this](const QVariant &value) {
-        const qlonglong newPos = value.toLongLong();
-        if (position_ != newPos) {
-            position_ = newPos;
-            emit positionChanged();
-        }
+    const QString service = serviceName();
+    if (service.isEmpty()) return;
+    const quint64 generation = selectionGeneration_;
+    const quint64 epoch = positionRequestEpoch_;
+    if (acceptPlayingZero) {
+        acceptPlayingZeroPosition_ = true;
+        acceptPlayingZeroPositionEpoch_ = epoch;
+    }
+    const QString property = QStringLiteral("Position");
+    const quint64 requestId = ++nextRequestId_;
+    latestRequestIds_[property] = requestId;
+    QDBusMessage message = QDBusMessage::createMethodCall(
+        service, QStringLiteral("/org/mpris/MediaPlayer2"),
+        kPropertiesInterface, QStringLiteral("Get"));
+    message << kPlayerInterface << property;
+    auto *watcher = new QDBusPendingCallWatcher(
+        QDBusConnection::sessionBus().asyncCall(message), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, watcher, service, generation, epoch, property, requestId] {
+        QDBusPendingReply<QVariant> reply = *watcher;
+        watcher->deleteLater();
+        if (reply.isError() || epoch != positionRequestEpoch_
+            || !isCurrentRequest(service, serviceName(), generation, selectionGeneration_,
+                                 requestId, latestRequestIds_.value(property))) return;
+        const qlonglong newPos = reply.value().toLongLong();
+        const bool acceptPlayingZero = acceptPlayingZeroPosition_
+            && acceptPlayingZeroPositionEpoch_ == epoch;
+        advancePositionEstimate();
+        if (!acceptPlayingZero && newPos == 0
+            && playbackStatus_ == QStringLiteral("Playing")
+            && preservePlayingPositionFromZeroPolls_) return;
+        if (!acceptPlayingZero && playbackStatus_ == QStringLiteral("Playing")
+            && positionEstimateValid_ && newPos <= estimatedPosition()) return;
+        acceptPlayingZeroPosition_ = false;
+        if (newPos == 0 || playbackStatus_ != QStringLiteral("Playing"))
+            preservePlayingPositionFromZeroPolls_ = false;
+        setPositionEstimate(newPos);
     });
+}
+
+void MprisManager::updatePlaybackStatus(const QString &status)
+{
+    if (playbackStatus_ == status) return;
+
+    if (playingPositionEstimateActive_)
+        advancePositionEstimate();
+    playingPositionEstimateActive_ = false;
+    playbackStatus_ = status;
+    if (playbackStatus_ == QStringLiteral("Playing") && positionEstimateValid_) {
+        positionEstimateAnchor_ = position_;
+        positionEstimateTimer_.restart();
+        playingPositionEstimateActive_ = true;
+    }
+    emit playbackStatusChanged();
+}
+
+qlonglong MprisManager::boundedPosition(qlonglong position) const
+{
+    return duration_ > 0
+        ? std::clamp(position, 0LL, duration_) : std::max(0LL, position);
+}
+
+bool MprisManager::hasValidTrackId() const
+{
+    if (!trackId_.startsWith(u'/')) return false;
+    if (trackId_.size() > 1 && trackId_.endsWith(u'/')) return false;
+    for (qsizetype index = 1; index < trackId_.size(); ++index) {
+        const QChar character = trackId_.at(index);
+        if (character == u'/') {
+            if (trackId_.at(index - 1) == u'/') return false;
+        } else if (!((character >= u'A' && character <= u'Z')
+                     || (character >= u'a' && character <= u'z')
+                     || (character >= u'0' && character <= u'9')
+                     || character == u'_')) {
+            return false;
+        }
+    }
+    return true;
+}
+
+qlonglong MprisManager::estimatedPosition() const
+{
+    if (!playingPositionEstimateActive_ || !positionEstimateTimer_.isValid())
+        return boundedPosition(position_);
+    return boundedPosition(saturatingPositionAdd(
+        positionEstimateAnchor_, positionEstimateTimer_.nsecsElapsed() / 1000LL));
+}
+
+void MprisManager::advancePositionEstimate()
+{
+    const qlonglong estimate = estimatedPosition();
+    if (position_ != estimate) {
+        position_ = estimate;
+        emit positionChanged();
+    }
+}
+
+void MprisManager::setPositionEstimate(qlonglong position)
+{
+    const qlonglong bounded = boundedPosition(position);
+    positionEstimateAnchor_ = bounded;
+    positionEstimateValid_ = true;
+    playingPositionEstimateActive_ = playbackStatus_ == QStringLiteral("Playing");
+    if (playingPositionEstimateActive_)
+        positionEstimateTimer_.restart();
+    if (position_ != bounded) {
+        position_ = bounded;
+        emit positionChanged();
+    }
 }
 
 void MprisManager::requestProperty(const QString &service, const QString &property,
@@ -695,13 +852,44 @@ void MprisManager::previous() {
 }
 
 void MprisManager::seek(qlonglong offsetUs) {
-    sendAsyncMethod(serviceName(), kPlayerInterface, QStringLiteral("Seek"), {offsetUs});
+    sendSeekCommand(QStringLiteral("Seek"), {offsetUs},
+                    saturatingPositionAdd(position_, offsetUs));
 }
 
 void MprisManager::setPosition(qlonglong positionUs) {
     if (trackId_.isEmpty()) return;
-    sendAsyncMethod(serviceName(), kPlayerInterface, QStringLiteral("SetPosition"),
-                    {QVariant::fromValue(QDBusObjectPath(trackId_)), positionUs});
+    sendSeekCommand(QStringLiteral("SetPosition"),
+                    {QVariant::fromValue(QDBusObjectPath(trackId_)), positionUs}, positionUs);
+}
+
+void MprisManager::sendSeekCommand(const QString &method, const QList<QVariant> &arguments,
+                                   qlonglong optimisticPosition)
+{
+    const QString service = serviceName();
+    if (service.isEmpty()) return;
+    const quint64 generation = selectionGeneration_;
+    const quint64 epoch = ++positionRequestEpoch_;
+    acceptPlayingZeroPosition_ = false;
+    latestRequestIds_[QStringLiteral("Position")] = ++nextRequestId_;
+    const qlonglong boundedPosition = this->boundedPosition(optimisticPosition);
+    preservePlayingPositionFromZeroPolls_ = playbackStatus_ == QStringLiteral("Playing")
+        && boundedPosition > 0;
+    setPositionEstimate(boundedPosition);
+
+    QDBusMessage message = QDBusMessage::createMethodCall(
+        service, QStringLiteral("/org/mpris/MediaPlayer2"), kPlayerInterface, method);
+    message.setArguments(arguments);
+    auto *watcher = new QDBusPendingCallWatcher(
+        QDBusConnection::sessionBus().asyncCall(message), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, watcher, service, generation, epoch] {
+        QDBusPendingReply<> reply = *watcher;
+        watcher->deleteLater();
+        if (epoch != positionRequestEpoch_
+            || generation != selectionGeneration_
+            || !isCurrentService(service, serviceName())) return;
+        fetchPosition(reply.isError());
+    });
 }
 
 void MprisManager::selectNextPlayer() {
@@ -743,11 +931,19 @@ void MprisManager::cycleLoopStatus() {
 }
 
 void MprisManager::skipForward(int seconds) {
-    seek(static_cast<qlonglong>(seconds) * 1000000LL);
+    const qlonglong offset = static_cast<qlonglong>(seconds) * 1000000LL;
+    if (hasValidTrackId())
+        setPosition(boundedPosition(saturatingPositionAdd(estimatedPosition(), offset)));
+    else
+        seek(offset);
 }
 
 void MprisManager::skipBackward(int seconds) {
-    seek(-static_cast<qlonglong>(seconds) * 1000000LL);
+    const qlonglong offset = -static_cast<qlonglong>(seconds) * 1000000LL;
+    if (hasValidTrackId())
+        setPosition(boundedPosition(saturatingPositionAdd(estimatedPosition(), offset)));
+    else
+        seek(offset);
 }
 
 QString MprisManager::playerIcon() const {

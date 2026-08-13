@@ -77,8 +77,10 @@ Card {
                                            * controlsElementScale
     readonly property real extraSize: 24 * buttonScale * controlContentScale
                                             * controlsElementScale
-    readonly property real transportSpacing: 20 * buttonScale * controlContentScale
-                                                    * controlsElementScale
+    readonly property real transportSlotSize: Math.max(44, playPauseSize, skipSize, extraSize)
+    readonly property real transportSpacing: Math.max(0, Math.min(
+        20 * buttonScale * controlContentScale * controlsElementScale,
+        (224 * buttonScale - 5 * transportSlotSize) / 4))
     readonly property string controlsAlignment: settings.controlsAlignment || "center"
 
     // Player switcher
@@ -115,6 +117,15 @@ Card {
         var desktop = mprisManager.desktopEntry
         if (desktop)
             appLaunchManager.launch(desktop, "", "", true)
+    }
+
+    function activateTransportKey(event, control) {
+        if (event.key === Qt.Key_Return
+                || event.key === Qt.Key_Enter
+                || event.key === Qt.Key_Space) {
+            control.activate()
+            event.accepted = true
+        }
     }
 
     // ── Empty state when no player running ──
@@ -739,134 +750,296 @@ Card {
                 id: transportRow
                 spacing: mediaTile.transportSpacing
 
-                // Left extra: shuffle (Spotify) or rewind/seek-back (browser)
+                // Left extra: shuffle (Spotify) or explicit 10-second seek (browser)
                 Item {
-                width: mediaTile.extraSize; height: mediaTile.extraSize
-                anchors.verticalCenter: parent.verticalCenter
-                visible: mprisManager.isSpotify || mprisManager.canSeek
-
-                LucideIcon {
-                    anchors.fill: parent
-                    source: mprisManager.isSpotify
-                            ? "qrc:/icons/lucide/shuffle.svg"
-                            : "qrc:/icons/lucide/rewind.svg"
-                    color: mprisManager.isSpotify && mprisManager.shuffle
-                           ? themeManager.accentColor
-                           : themeManager.textColor
-                    opacity: mprisManager.isSpotify
-                             ? (mprisManager.shuffle ? 1.0 : 0.4)
-                             : 0.7
-                }
-
-                Rectangle {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    anchors.top: parent.bottom
-                    anchors.topMargin: 3 * mediaTile.buttonScale
-                    width: 4 * mediaTile.buttonScale; height: 4 * mediaTile.buttonScale
-                    radius: width / 2
-                    color: themeManager.accentColor
-                    visible: mprisManager.isSpotify && mprisManager.shuffle
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    anchors.margins: -10
+                    id: seekBackwardButton
+                    width: mediaTile.transportSlotSize
+                    height: mediaTile.transportSlotSize
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: mprisManager.isSpotify || mprisManager.canSeek
                     enabled: !mediaTile.contentEditMode
-                    onClicked: {
+                    activeFocusOnTab: enabled
+                    Accessible.role: Accessible.Button
+                    Accessible.name: mprisManager.isSpotify
+                        ? "Toggle shuffle" : "Seek backward 10 seconds"
+                    Accessible.onPressAction: seekBackwardButton.activate()
+                    Keys.onPressed: (event) => mediaTile.activateTransportKey(event, seekBackwardButton)
+
+                    function activate() {
+                        if (!enabled)
+                            return
                         if (mprisManager.isSpotify)
                             mprisManager.toggleShuffle()
                         else
                             mprisManager.skipBackward(10)
                     }
-                }
+
+                    Rectangle {
+                        width: mediaTile.extraSize
+                        height: mediaTile.extraSize
+                        anchors.centerIn: parent
+                        radius: 8
+                        color: mprisManager.isSpotify ? "transparent"
+                            : Qt.rgba(themeManager.textColor.r, themeManager.textColor.g,
+                                      themeManager.textColor.b, 0.08)
+                    }
+
+                    LucideIcon {
+                        id: backwardExtraIcon
+                        width: mediaTile.extraSize
+                        height: mediaTile.extraSize
+                        anchors.centerIn: parent
+                        visible: mprisManager.isSpotify
+                        source: "qrc:/icons/lucide/shuffle.svg"
+                        color: mprisManager.shuffle ? themeManager.accentColor
+                                                   : themeManager.textColor
+                        opacity: mprisManager.shuffle ? 1.0 : 0.4
+                    }
+
+                    Text {
+                        anchors.centerIn: parent
+                        visible: !mprisManager.isSpotify
+                        text: "-10"
+                        color: themeManager.textColor
+                        font.pixelSize: Math.max(11, 11 * mediaTile.controlContentScale
+                                                * mediaTile.controlsElementScale)
+                        font.bold: true
+                        renderType: Text.NativeRendering
+                    }
+
+                    Rectangle {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.top: backwardExtraIcon.bottom
+                        anchors.topMargin: 3 * mediaTile.buttonScale
+                        width: 4 * mediaTile.buttonScale; height: 4 * mediaTile.buttonScale
+                        radius: width / 2
+                        color: themeManager.accentColor
+                        visible: mprisManager.isSpotify && mprisManager.shuffle
+                    }
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 8
+                        color: "transparent"
+                        border.width: seekBackwardButton.activeFocus ? 2 : 0
+                        border.color: themeManager.accentColor
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        enabled: seekBackwardButton.enabled
+                        onClicked: seekBackwardButton.activate()
+                    }
                 }
 
-                LucideIcon {
-                width: mediaTile.skipSize; height: mediaTile.skipSize
-                source: "qrc:/icons/lucide/skip-back.svg"
-                color: themeManager.textColor
-                opacity: mprisManager.canGoPrevious ? 1.0 : 0.3
-                anchors.verticalCenter: parent.verticalCenter
-                MouseArea {
-                    anchors.fill: parent
-                    anchors.margins: -10
-                    enabled: !mediaTile.contentEditMode
-                    onClicked: mprisManager.previous()
-                }
-                }
-
-                LucideIcon {
-                width: mediaTile.playPauseSize; height: mediaTile.playPauseSize
-                source: mprisManager.playbackStatus === "Playing"
-                        ? "qrc:/icons/lucide/pause.svg"
-                        : "qrc:/icons/lucide/play.svg"
-                color: themeManager.textColor
-                anchors.verticalCenter: parent.verticalCenter
-                MouseArea {
-                    anchors.fill: parent
-                    anchors.margins: -10
-                    enabled: !mediaTile.contentEditMode
-                    onClicked: mprisManager.playPause()
-                }
-                }
-
-                LucideIcon {
-                width: mediaTile.skipSize; height: mediaTile.skipSize
-                source: "qrc:/icons/lucide/skip-forward.svg"
-                color: themeManager.textColor
-                opacity: mprisManager.canGoNext ? 1.0 : 0.3
-                anchors.verticalCenter: parent.verticalCenter
-                MouseArea {
-                    anchors.fill: parent
-                    anchors.margins: -10
-                    enabled: !mediaTile.contentEditMode
-                    onClicked: mprisManager.next()
-                }
-                }
-
-                // Right extra: repeat (Spotify) or fast-forward/seek-fwd (browser)
                 Item {
-                width: mediaTile.extraSize; height: mediaTile.extraSize
-                anchors.verticalCenter: parent.verticalCenter
-                visible: mprisManager.isSpotify || mprisManager.canSeek
-
-                LucideIcon {
-                    anchors.fill: parent
-                    source: mprisManager.isSpotify
-                            ? (mprisManager.loopStatus === "Track"
-                               ? "qrc:/icons/lucide/repeat-1.svg"
-                               : "qrc:/icons/lucide/repeat.svg")
-                            : "qrc:/icons/lucide/fast-forward.svg"
-                    color: mprisManager.isSpotify && mprisManager.loopStatus !== "None"
-                           ? themeManager.accentColor
-                           : themeManager.textColor
-                    opacity: mprisManager.isSpotify
-                             ? (mprisManager.loopStatus !== "None" ? 1.0 : 0.4)
-                             : 0.7
-                }
-
-                Rectangle {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    anchors.top: parent.bottom
-                    anchors.topMargin: 3 * mediaTile.buttonScale
-                    width: 4 * mediaTile.buttonScale; height: 4 * mediaTile.buttonScale
-                    radius: width / 2
-                    color: themeManager.accentColor
-                    visible: mprisManager.isSpotify && mprisManager.loopStatus !== "None"
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    anchors.margins: -10
+                    id: previousButton
+                    width: mediaTile.transportSlotSize
+                    height: mediaTile.transportSlotSize
+                    anchors.verticalCenter: parent.verticalCenter
                     enabled: !mediaTile.contentEditMode
-                    onClicked: {
+                    activeFocusOnTab: enabled
+                    Accessible.role: Accessible.Button
+                    Accessible.name: "Previous track"
+                    Accessible.onPressAction: previousButton.activate()
+                    Keys.onPressed: (event) => mediaTile.activateTransportKey(event, previousButton)
+
+                    function activate() {
+                        if (enabled)
+                            mprisManager.previous()
+                    }
+
+                    LucideIcon {
+                        width: mediaTile.skipSize
+                        height: mediaTile.skipSize
+                        anchors.centerIn: parent
+                        source: "qrc:/icons/lucide/skip-back.svg"
+                        color: themeManager.textColor
+                        opacity: mprisManager.canGoPrevious ? 1.0 : 0.3
+                    }
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 8
+                        color: "transparent"
+                        border.width: previousButton.activeFocus ? 2 : 0
+                        border.color: themeManager.accentColor
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        enabled: previousButton.enabled
+                        onClicked: previousButton.activate()
+                    }
+                }
+
+                Item {
+                    id: playPauseButton
+                    width: mediaTile.transportSlotSize
+                    height: mediaTile.transportSlotSize
+                    anchors.verticalCenter: parent.verticalCenter
+                    enabled: !mediaTile.contentEditMode
+                    activeFocusOnTab: enabled
+                    Accessible.role: Accessible.Button
+                    Accessible.name: mprisManager.playbackStatus === "Playing" ? "Pause" : "Play"
+                    Accessible.onPressAction: playPauseButton.activate()
+                    Keys.onPressed: (event) => mediaTile.activateTransportKey(event, playPauseButton)
+
+                    function activate() {
+                        if (enabled)
+                            mprisManager.playPause()
+                    }
+
+                    LucideIcon {
+                        width: mediaTile.playPauseSize
+                        height: mediaTile.playPauseSize
+                        anchors.centerIn: parent
+                        source: mprisManager.playbackStatus === "Playing"
+                                ? "qrc:/icons/lucide/pause.svg"
+                                : "qrc:/icons/lucide/play.svg"
+                        color: themeManager.textColor
+                    }
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 8
+                        color: "transparent"
+                        border.width: playPauseButton.activeFocus ? 2 : 0
+                        border.color: themeManager.accentColor
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        enabled: playPauseButton.enabled
+                        onClicked: playPauseButton.activate()
+                    }
+                }
+
+                Item {
+                    id: nextButton
+                    width: mediaTile.transportSlotSize
+                    height: mediaTile.transportSlotSize
+                    anchors.verticalCenter: parent.verticalCenter
+                    enabled: !mediaTile.contentEditMode
+                    activeFocusOnTab: enabled
+                    Accessible.role: Accessible.Button
+                    Accessible.name: "Next track"
+                    Accessible.onPressAction: nextButton.activate()
+                    Keys.onPressed: (event) => mediaTile.activateTransportKey(event, nextButton)
+
+                    function activate() {
+                        if (enabled)
+                            mprisManager.next()
+                    }
+
+                    LucideIcon {
+                        width: mediaTile.skipSize
+                        height: mediaTile.skipSize
+                        anchors.centerIn: parent
+                        source: "qrc:/icons/lucide/skip-forward.svg"
+                        color: themeManager.textColor
+                        opacity: mprisManager.canGoNext ? 1.0 : 0.3
+                    }
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 8
+                        color: "transparent"
+                        border.width: nextButton.activeFocus ? 2 : 0
+                        border.color: themeManager.accentColor
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        enabled: nextButton.enabled
+                        onClicked: nextButton.activate()
+                    }
+                }
+
+                // Right extra: repeat (Spotify) or explicit 10-second seek (browser)
+                Item {
+                    id: seekForwardButton
+                    width: mediaTile.transportSlotSize
+                    height: mediaTile.transportSlotSize
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: mprisManager.isSpotify || mprisManager.canSeek
+                    enabled: !mediaTile.contentEditMode
+                    activeFocusOnTab: enabled
+                    Accessible.role: Accessible.Button
+                    Accessible.name: mprisManager.isSpotify
+                        ? "Change repeat mode" : "Seek forward 10 seconds"
+                    Accessible.onPressAction: seekForwardButton.activate()
+                    Keys.onPressed: (event) => mediaTile.activateTransportKey(event, seekForwardButton)
+
+                    function activate() {
+                        if (!enabled)
+                            return
                         if (mprisManager.isSpotify)
                             mprisManager.cycleLoopStatus()
                         else
                             mprisManager.skipForward(10)
                     }
+
+                    Rectangle {
+                        width: mediaTile.extraSize
+                        height: mediaTile.extraSize
+                        anchors.centerIn: parent
+                        radius: 8
+                        color: mprisManager.isSpotify ? "transparent"
+                            : Qt.rgba(themeManager.textColor.r, themeManager.textColor.g,
+                                      themeManager.textColor.b, 0.08)
+                    }
+
+                    LucideIcon {
+                        id: forwardExtraIcon
+                        width: mediaTile.extraSize
+                        height: mediaTile.extraSize
+                        anchors.centerIn: parent
+                        visible: mprisManager.isSpotify
+                        source: mprisManager.loopStatus === "Track"
+                            ? "qrc:/icons/lucide/repeat-1.svg"
+                            : "qrc:/icons/lucide/repeat.svg"
+                        color: mprisManager.loopStatus !== "None"
+                            ? themeManager.accentColor : themeManager.textColor
+                        opacity: mprisManager.loopStatus !== "None" ? 1.0 : 0.4
+                    }
+
+                    Text {
+                        anchors.centerIn: parent
+                        visible: !mprisManager.isSpotify
+                        text: "+10"
+                        color: themeManager.textColor
+                        font.pixelSize: Math.max(11, 11 * mediaTile.controlContentScale
+                                                * mediaTile.controlsElementScale)
+                        font.bold: true
+                        renderType: Text.NativeRendering
+                    }
+
+                    Rectangle {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.top: forwardExtraIcon.bottom
+                        anchors.topMargin: 3 * mediaTile.buttonScale
+                        width: 4 * mediaTile.buttonScale; height: 4 * mediaTile.buttonScale
+                        radius: width / 2
+                        color: themeManager.accentColor
+                        visible: mprisManager.isSpotify && mprisManager.loopStatus !== "None"
+                    }
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 8
+                        color: "transparent"
+                        border.width: seekForwardButton.activeFocus ? 2 : 0
+                        border.color: themeManager.accentColor
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        enabled: seekForwardButton.enabled
+                        onClicked: seekForwardButton.activate()
+                    }
                 }
-                }
+                // End transport controls
             }
 
             ContentEditableFrame { host: contentLayout; elementId: "controls" }

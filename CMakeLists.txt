@@ -348,6 +348,12 @@ if(BUILD_TESTING)
       -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/VerifyTileContentScale.cmake"
   )
 
+  add_test(NAME ciderdeck-media-seek-controls-contract
+    COMMAND "${CMAKE_COMMAND}"
+      "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+      -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/VerifyMediaSeekControls.cmake"
+  )
+
   add_test(NAME ciderdeck-monitoring-activity-contract
     COMMAND "${CMAKE_COMMAND}"
       "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
