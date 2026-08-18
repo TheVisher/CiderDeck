@@ -37,6 +37,7 @@
 #include "services/SystemMonitorService.h"
 #include "services/ProcessManagerService.h"
 #include "services/UpdateService.h"
+#include "services/AgentTerminalService.h"
 #include "services/ScreenshotService.h"
 #include "services/BrightnessService.h"
 #include "services/ClipboardService.h"
@@ -57,6 +58,7 @@ CiderDeckApp::CiderDeckApp(QObject *parent)
 int CiderDeckApp::run(QApplication &app) {
     // Core
     config_ = new DeckConfig(this);
+    config_->ensureAgentWorkspacePage();
     monitorManager_ = new MonitorManager(this);
     themeManager_ = new ThemeManager(config_, this);
 
@@ -70,6 +72,7 @@ int CiderDeckApp::run(QApplication &app) {
     systemMonitor_ = new SystemMonitorService(this);
     processManager_ = new ProcessManagerService(this);
     updateService_ = new UpdateService(this);
+    agentTerminalService_ = new AgentTerminalService(this);
     screenshotService_ = new ScreenshotService(this);
     brightnessService_ = new BrightnessService(this);
     clipboardService_ = new ClipboardService(this);
@@ -144,6 +147,7 @@ int CiderDeckApp::run(QApplication &app) {
     ctx->setContextProperty("systemMonitor", systemMonitor_);
     ctx->setContextProperty("processManager", processManager_);
     ctx->setContextProperty("updateService", updateService_);
+    ctx->setContextProperty("agentTerminalService", agentTerminalService_);
     ctx->setContextProperty("screenshotService", screenshotService_);
     ctx->setContextProperty("brightnessService", brightnessService_);
     ctx->setContextProperty("clipboardService", clipboardService_);

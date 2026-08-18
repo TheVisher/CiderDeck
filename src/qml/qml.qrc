@@ -10,6 +10,9 @@
         <file>ToastStack.qml</file>
         <file>PageDots.qml</file>
         <file>PagePager.qml</file>
+        <file>AgentWorkspacePage.qml</file>
+        <file>AgentSessionSidebar.qml</file>
+        <file>AgentTerminalPane.qml</file>
         <file>ContextMenu.qml</file>
         <file>ClockDateTile.qml</file>
         <file>AppLauncherTile.qml</file>

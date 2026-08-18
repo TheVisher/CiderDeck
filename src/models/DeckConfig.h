@@ -13,6 +13,7 @@ namespace ciderdeck {
 struct PageData {
     QString id;
     QString name;
+    QString type = QStringLiteral("dashboard");
     QList<TileData> tiles;
 
     QJsonObject toJson() const;
@@ -93,9 +94,12 @@ public:
     Q_INVOKABLE bool importConfig(const QString &path);
 
     Q_INVOKABLE void addPage(const QString &name = QString());
+    Q_INVOKABLE int ensureAgentWorkspacePage();
     Q_INVOKABLE void removePage(int index);
+    Q_INVOKABLE bool movePage(int fromIndex, int toIndex);
 
     Q_INVOKABLE QStringList pageNames() const;
+    Q_INVOKABLE QString pageType(int page) const;
     Q_INVOKABLE QVariantList tilesForPage(int page) const;
     Q_INVOKABLE void addTile(int page, const QVariantMap &tileMap);
     Q_INVOKABLE void removeTile(const QString &tileId);
@@ -118,6 +122,7 @@ signals:
     void configLoaded();
 
 private:
+    bool backupConfig(const QString &reason) const;
     void ensureDefaultPage();
     int findTilePage(const QString &tileId) const;
 

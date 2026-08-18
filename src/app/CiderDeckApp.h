@@ -20,6 +20,7 @@ class WeatherService;
 class SystemMonitorService;
 class ProcessManagerService;
 class UpdateService;
+class AgentTerminalService;
 class ScreenshotService;
 class BrightnessService;
 class ClipboardService;
@@ -61,6 +62,7 @@ private:
     SystemMonitorService *systemMonitor_ = nullptr;
     ProcessManagerService *processManager_ = nullptr;
     UpdateService *updateService_ = nullptr;
+    AgentTerminalService *agentTerminalService_ = nullptr;
     ScreenshotService *screenshotService_ = nullptr;
     BrightnessService *brightnessService_ = nullptr;
     ClipboardService *clipboardService_ = nullptr;

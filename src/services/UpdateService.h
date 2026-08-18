@@ -58,6 +58,7 @@ public:
     Q_INVOKABLE void setTerminalSize(int columns, int rows);
 
     static QString sanitizeTerminalOutput(const QByteArray &output);
+    static QString updateCommandScript();
 
 signals:
     void updated();
@@ -70,7 +71,6 @@ private:
     void finishCheck(Source source, int exitCode, bool crashed);
     void failCheck(Source source, const QString &message);
     void completeSource(Source source);
-    QString updateCommand() const;
     bool startEmbeddedUpdate(const QString &command);
     void startExternalUpdate(const QString &command);
     void readTerminalOutput();

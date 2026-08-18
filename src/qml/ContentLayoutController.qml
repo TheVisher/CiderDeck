@@ -60,8 +60,22 @@ Item {
         return saved[key] !== undefined
     }
 
-    function elementX(elementId) { return elementValue(elementId, "x") * canvas.width }
-    function elementY(elementId) { return elementValue(elementId, "y") * canvas.height }
+    function elementX(elementId) {
+        var saved = customLayout[elementId] || ({})
+        if (saved.anchorX === "center") {
+            var item = elementItem(elementId)
+            return item ? (canvas.width - item.width) / 2 : canvas.width / 2
+        }
+        return elementValue(elementId, "x") * canvas.width
+    }
+    function elementY(elementId) {
+        var saved = customLayout[elementId] || ({})
+        if (saved.anchorY === "center") {
+            var item = elementItem(elementId)
+            return item ? (canvas.height - item.height) / 2 : canvas.height / 2
+        }
+        return elementValue(elementId, "y") * canvas.height
+    }
     function elementScale(elementId) {
         return Math.max(0.5, Math.min(3, elementValue(elementId, "scale")))
     }
@@ -209,8 +223,13 @@ Item {
         }
     }
 
+    function latestSettings() {
+        var latestTile = tileId ? tileGridModel.getTileById(tileId) : ({})
+        return latestTile.settings || settings || ({})
+    }
+
     function saveLayout(layout) {
-        var newSettings = Object.assign({}, settings)
+        var newSettings = Object.assign({}, latestSettings())
         newSettings[layoutKey] = layout
         deckConfig.updateTile(tileId, { settings: newSettings })
     }
@@ -220,6 +239,14 @@ Item {
         var element = Object.assign({}, layout[elementId] || ({}))
         element.x = Math.round((item.x / canvas.width) * 10000) / 10000
         element.y = Math.round((item.y / canvas.height) * 10000) / 10000
+        if (showVerticalGuide)
+            element.anchorX = "center"
+        else
+            delete element.anchorX
+        if (showHorizontalGuide)
+            element.anchorY = "center"
+        else
+            delete element.anchorY
         layout[elementId] = element
         saveLayout(layout)
     }

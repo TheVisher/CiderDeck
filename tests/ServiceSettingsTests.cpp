@@ -5,6 +5,7 @@
 #include <QDBusObjectPath>
 #include <QDBusVariant>
 #include <QDBusVirtualObject>
+#include <QProcess>
 #include <QSignalSpy>
 #include <QVariant>
 
@@ -299,6 +300,7 @@ private slots:
     void playerctldRemainsAvailableForSoleAndManualSelection();
     void mediaDurationSurvivesIncompleteMetadataRefresh();
     void terminalOutputIsMadeReadable();
+    void updateCommandHandlesStalePacmanLocks();
 };
 
 void ServiceSettingsTests::timerDefaultDurationIsApplied()
@@ -1330,6 +1332,23 @@ void ServiceSettingsTests::terminalOutputIsMadeReadable()
                               "abc\b\bde\n";
     QCOMPARE(UpdateService::sanitizeTerminalOutput(output),
              QStringLiteral("Update\nDownloading 20%\nade\n"));
+}
+
+void ServiceSettingsTests::updateCommandHandlesStalePacmanLocks()
+{
+    const QString command = UpdateService::updateCommandScript();
+    QVERIFY(command.contains(QStringLiteral("Stale Pacman lock detected")));
+    QVERIFY(command.contains(QStringLiteral("Remove the stale lock and continue?")));
+    QVERIFY(command.contains(QStringLiteral("Pacman is actively in use by")));
+    QVERIFY(command.contains(QStringLiteral("sudo rm -f -- \"$pacman_lock\"")));
+
+    QProcess syntaxCheck;
+    syntaxCheck.start(QStringLiteral("/bin/bash"), {QStringLiteral("-n")});
+    QVERIFY(syntaxCheck.waitForStarted());
+    syntaxCheck.write(command.toUtf8());
+    syntaxCheck.closeWriteChannel();
+    QVERIFY(syntaxCheck.waitForFinished());
+    QCOMPARE(syntaxCheck.exitCode(), 0);
 }
 
 QTEST_GUILESS_MAIN(ServiceSettingsTests)

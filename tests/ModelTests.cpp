@@ -1,10 +1,16 @@
 #include <QtTest/QTest>
 
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
 #include <QTemporaryDir>
 
 #include "models/DeckConfig.h"
 #include "models/TileData.h"
 #include "models/TileType.h"
+#include "services/AudioRoutingPolicy.h"
 #include "viewmodels/TileGridModel.h"
 
 using namespace ciderdeck;
@@ -18,6 +24,10 @@ private slots:
     void tileDataRoundTripsThroughJson();
     void gridDetectsCollisionsAndFindsFreeSpace();
     void tilesMoveBetweenPages();
+    void agentWorkspacePageIsAddedOnce();
+    void pagesCanBeReordered();
+    void deletingPageCreatesRecoveryBackup();
+    void audioRoutingPolicyRecognizesAsmObjects();
 
 private:
     QTemporaryDir configDir_;
@@ -164,6 +174,96 @@ void ModelTests::tilesMoveBetweenPages() {
 
     QVERIFY(!config.moveTileToPage(QStringLiteral("blocked-tile"), 1));
     QCOMPARE(config.tilesForPage(0).size(), 1);
+}
+
+void ModelTests::agentWorkspacePageIsAddedOnce() {
+    DeckConfig config;
+    const int originalCount = config.pageCount();
+    const int page = config.ensureAgentWorkspacePage();
+
+    QCOMPARE(config.pageCount(), originalCount + 1);
+    QCOMPARE(config.pageType(page), QStringLiteral("agents"));
+    QCOMPARE(config.pageNames().at(page), QStringLiteral("Agents"));
+    QCOMPARE(config.ensureAgentWorkspacePage(), page);
+    QCOMPARE(config.pageCount(), originalCount + 1);
+
+    DeckConfig reloaded;
+    QCOMPARE(reloaded.pageType(page), QStringLiteral("agents"));
+    QCOMPARE(reloaded.ensureAgentWorkspacePage(), page);
+    QCOMPARE(reloaded.pageCount(), originalCount + 1);
+}
+
+void ModelTests::pagesCanBeReordered() {
+    DeckConfig config;
+    while (config.pageCount() > 1)
+        config.removePage(config.pageCount() - 1);
+    config.addPage(QStringLiteral("Second"));
+    config.addPage(QStringLiteral("Third"));
+    config.setCurrentPage(0);
+
+    QVERIFY(config.movePage(0, 2));
+    QCOMPARE(config.pageNames(), QStringList({QStringLiteral("Second"),
+                                              QStringLiteral("Third"),
+                                              QStringLiteral("Page 1")}));
+    QCOMPARE(config.currentPage(), 2);
+
+    QVERIFY(config.movePage(0, 1));
+    QCOMPARE(config.pageNames(), QStringList({QStringLiteral("Third"),
+                                              QStringLiteral("Second"),
+                                              QStringLiteral("Page 1")}));
+    QCOMPARE(config.currentPage(), 2);
+    QVERIFY(!config.movePage(-1, 0));
+    QVERIFY(!config.movePage(0, 3));
+}
+
+void ModelTests::deletingPageCreatesRecoveryBackup() {
+    DeckConfig config;
+    config.addPage(QStringLiteral("Important"));
+    const int pageCountBeforeDelete = config.pageCount();
+    const QString configPath = config.configPath();
+    const QDir backupDir(QFileInfo(configPath).dir().filePath(QStringLiteral("backups")));
+    const QStringList backupsBefore = backupDir.entryList(
+        {QStringLiteral("config-before-page-delete-*.json")},
+        QDir::Files);
+
+    config.removePage(0);
+
+    const QStringList backupsAfter = backupDir.entryList(
+        {QStringLiteral("config-before-page-delete-*.json")},
+        QDir::Files);
+    QCOMPARE(backupsAfter.size(), backupsBefore.size() + 1);
+
+    QString newBackup;
+    for (const QString &backup : backupsAfter) {
+        if (!backupsBefore.contains(backup)) {
+            newBackup = backup;
+            break;
+        }
+    }
+    QVERIFY(!newBackup.isEmpty());
+
+    QFile backup(backupDir.filePath(newBackup));
+    QVERIFY(backup.open(QIODevice::ReadOnly));
+    const QJsonDocument document = QJsonDocument::fromJson(backup.readAll());
+    QVERIFY(document.isObject());
+    QCOMPARE(document.object()[QStringLiteral("pages")].toArray().size(),
+             pageCountBeforeDelete);
+}
+
+void ModelTests::audioRoutingPolicyRecognizesAsmObjects() {
+    using ciderdeck::audio::isAsmVirtualSinkName;
+    using ciderdeck::audio::isInternalProcessingStreamName;
+
+    QVERIFY(isAsmVirtualSinkName(u"Arctis_Game"));
+    QVERIFY(isAsmVirtualSinkName(u"Arctis_Media"));
+    QVERIFY(isAsmVirtualSinkName(u"Arctis_Chat"));
+    QVERIFY(!isAsmVirtualSinkName(u"alsa_output.usb-SteelSeries"));
+
+    QVERIFY(isInternalProcessingStreamName(u"Sonar Media EQ output"));
+    QVERIFY(isInternalProcessingStreamName(u"Arctis Nova Pro Wireless Game output"));
+    QVERIFY(isInternalProcessingStreamName(u"Virtual Surround Sink"));
+    QVERIFY(!isInternalProcessingStreamName(u"Zen"));
+    QVERIFY(!isInternalProcessingStreamName(u"World of Warcraft"));
 }
 
 QTEST_GUILESS_MAIN(ModelTests)

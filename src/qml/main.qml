@@ -32,6 +32,8 @@ Window {
     property var contentItemValueValidator: null
     property string contentValidatorOwner: ""
     property string contentEditConstraint: ""
+    property int pendingPageDeleteIndex: -1
+    property string pendingPageDeleteName: ""
     property bool keyboardInteractivityEnabled: false
 
     function beginContentEdit(tileId, initialElement) {
@@ -67,6 +69,8 @@ Window {
         var enabled = editController.editing
             || settingsPanel.isOpen
             || updateService.terminalActive
+            || deckConfig.pageType(deckConfig.currentPage) === "agents"
+            || deletePageDialog.visible
             || touchCalibrationService.active
         if (enabled === root.keyboardInteractivityEnabled)
             return
@@ -299,6 +303,13 @@ Window {
     }
 
     Connections {
+        target: deckConfig
+        function onCurrentPageChanged() {
+            root.syncKeyboardInteractivity()
+        }
+    }
+
+    Connections {
         target: touchCalibrationService
         function onStateChanged() {
             root.syncKeyboardInteractivity()
@@ -308,6 +319,140 @@ Window {
     // Context menu
     ContextMenu {
         id: contextMenu
+        onPageDeleteRequested: (pageIndex, pageName) => {
+            root.pendingPageDeleteIndex = pageIndex
+            root.pendingPageDeleteName = pageName
+            deletePageDialog.open()
+        }
+    }
+
+    Item {
+        id: deletePageDialog
+        z: 400
+        anchors.fill: parent
+        visible: false
+        focus: visible
+
+        function open() {
+            visible = true
+            forceActiveFocus()
+            root.syncKeyboardInteractivity()
+        }
+
+        function close() {
+            visible = false
+            root.pendingPageDeleteIndex = -1
+            root.pendingPageDeleteName = ""
+            root.syncKeyboardInteractivity()
+        }
+
+        Keys.onEscapePressed: close()
+
+        Rectangle {
+            anchors.fill: parent
+            color: "#99000000"
+
+            MouseArea {
+                anchors.fill: parent
+                onClicked: deletePageDialog.close()
+            }
+        }
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: Math.min(540, root.width - 48)
+            height: 220
+            radius: 14
+            color: "#171d29"
+            border.color: "#42506a"
+            border.width: 1
+
+            MouseArea {
+                anchors.fill: parent
+            }
+
+            Text {
+                anchors {
+                    top: parent.top
+                    left: parent.left
+                    right: parent.right
+                    margins: 24
+                }
+                text: "Delete " + root.pendingPageDeleteName + "?"
+                color: "#f4f7fb"
+                font.pixelSize: 24
+                font.bold: true
+            }
+
+            Text {
+                anchors {
+                    top: parent.top
+                    topMargin: 72
+                    left: parent.left
+                    right: parent.right
+                    margins: 24
+                }
+                text: "This removes the page and all of its tiles. CiderDeck will save a recovery backup first."
+                color: "#b9c3d6"
+                font.pixelSize: 17
+                wrapMode: Text.WordWrap
+            }
+
+            Row {
+                anchors {
+                    right: parent.right
+                    bottom: parent.bottom
+                    margins: 20
+                }
+                spacing: 12
+
+                Rectangle {
+                    width: 120
+                    height: 46
+                    radius: 8
+                    color: cancelArea.pressed ? "#354157" : "#283246"
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "Cancel"
+                        color: "#f4f7fb"
+                        font.pixelSize: 17
+                    }
+
+                    MouseArea {
+                        id: cancelArea
+                        anchors.fill: parent
+                        onClicked: deletePageDialog.close()
+                    }
+                }
+
+                Rectangle {
+                    width: 150
+                    height: 46
+                    radius: 8
+                    color: deleteArea.pressed ? "#a92f3b" : "#c43d4a"
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "Delete Page"
+                        color: "white"
+                        font.pixelSize: 17
+                        font.bold: true
+                    }
+
+                    MouseArea {
+                        id: deleteArea
+                        anchors.fill: parent
+                        onClicked: {
+                            var page = root.pendingPageDeleteIndex
+                            deletePageDialog.close()
+                            if (page >= 0)
+                                deckConfig.removePage(page)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // Settings panel

@@ -125,20 +125,78 @@ void UpdateService::updateAll() {
         return;
 
     errors_.clear();
-    const QString command = updateCommand();
+    const QString command = updateCommandScript();
     if (!startEmbeddedUpdate(command))
         startExternalUpdate(command);
 }
 
-QString UpdateService::updateCommand() const {
+QString UpdateService::updateCommandScript() {
     return QStringLiteral(R"SCRIPT(
 clear
 printf '\n\033[1;36mCiderDeck System Update\033[0m\n\n'
 arch_status=0
 flatpak_status=0
+pacman_lock=/var/lib/pacman/db.lck
+
+active_package_manager() {
+    for manager in pacman paru yay pikaur trizen pamac; do
+        if pgrep -x "$manager" >/dev/null 2>&1; then
+            printf '%s' "$manager"
+            return 0
+        fi
+    done
+    return 1
+}
+
+while [ -e "$pacman_lock" ]; do
+    manager=$(active_package_manager)
+    if [ -n "$manager" ]; then
+        printf '\033[1;33mPacman is actively in use by %s.\033[0m\n' "$manager"
+        printf 'CiderDeck will wait and retry. Press Ctrl+C to cancel.\n'
+        while [ -e "$pacman_lock" ] && active_package_manager >/dev/null; do
+            sleep 3
+        done
+        printf '\nChecking the Pacman lock again...\n'
+        continue
+    fi
+
+    lock_time=$(stat -c '%y' "$pacman_lock" 2>/dev/null | cut -d. -f1)
+    printf '\033[1;33mStale Pacman lock detected.\033[0m\n'
+    printf 'No package manager is running, but this file was left behind:\n  %s\n' "$pacman_lock"
+    if [ -n "$lock_time" ]; then
+        printf 'It was last changed: %s\n' "$lock_time"
+    fi
+    printf 'This usually means an earlier update was canceled or interrupted.\n\n'
+    printf 'Remove the stale lock and continue? [y/N]: '
+    IFS= read -r clear_lock
+
+    case "$clear_lock" in
+        y|Y|yes|YES|Yes)
+            manager=$(active_package_manager)
+            if [ -n "$manager" ]; then
+                printf '\n\033[1;31m%s started before the lock could be cleared. Nothing was removed.\033[0m\n' "$manager"
+                continue
+            fi
+            if sudo rm -f -- "$pacman_lock" && [ ! -e "$pacman_lock" ]; then
+                printf '\033[1;32mStale lock cleared. Continuing with updates.\033[0m\n\n'
+            else
+                printf '\033[1;31mThe stale lock could not be removed.\033[0m\n'
+                arch_status=75
+                break
+            fi
+            ;;
+        *)
+            printf '\nLock left untouched; skipping Arch updates.\n'
+            arch_status=75
+            break
+            ;;
+    esac
+done
 
 printf '\033[1mArch repositories and AUR\033[0m\n'
-if command -v paru >/dev/null 2>&1; then
+if [ "$arch_status" -ne 0 ]; then
+    printf 'Arch updates were skipped.\n'
+elif command -v paru >/dev/null 2>&1; then
     paru -Syu || arch_status=$?
 else
     printf '\033[1;31mparu is not installed.\033[0m\n'

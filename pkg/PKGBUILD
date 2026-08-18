@@ -15,6 +15,7 @@ depends=(
   'kstatusnotifieritem'
   'pulseaudio-qt'
   'ddcutil'
+  'tmux'
 )
 makedepends=(
   'cmake'

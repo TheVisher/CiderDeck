@@ -66,6 +66,8 @@ add_executable(ciderdeck
   src/services/ProcessManagerService.cpp
   src/services/UpdateService.h
   src/services/UpdateService.cpp
+  src/services/AgentTerminalService.h
+  src/services/AgentTerminalService.cpp
   src/services/ScreenshotService.h
   src/services/ScreenshotService.cpp
   src/services/BrightnessService.h
@@ -332,6 +334,15 @@ if(BUILD_TESTING)
   endif()
 
   if(TARGET Qt6::qmltestrunner)
+    add_test(NAME ciderdeck-content-layout-qml-tests
+      COMMAND Qt6::qmltestrunner
+        -input "${CMAKE_CURRENT_SOURCE_DIR}/tests/qml/tst_ContentLayoutController.qml"
+        -import "${CMAKE_CURRENT_SOURCE_DIR}/src/qml"
+    )
+    set_tests_properties(ciderdeck-content-layout-qml-tests PROPERTIES
+      ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    )
+
     add_test(NAME ciderdeck-metric-sparkline-qml-tests
       COMMAND Qt6::qmltestrunner
         -input "${CMAKE_CURRENT_SOURCE_DIR}/tests/qml/tst_MetricSparkline.qml"

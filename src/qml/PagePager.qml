@@ -17,7 +17,8 @@ Item {
     property bool dragging: false
 
     function beginSwipe() {
-        if (editController.editing || pageCount < 2)
+        if (editController.editing || pageCount < 2
+                || deckConfig.pageType(deckConfig.currentPage) === "agents")
             return
         settleAnimation.stop()
         dragStartOffset = contentOffset
@@ -96,17 +97,31 @@ Item {
         Repeater {
             model: pager.pageCount
 
-            delegate: DashboardPage {
+            delegate: Loader {
+                id: pageLoader
                 required property int index
                 width: pager.width
                 height: pager.height
-                pageIndex: index
-                gridColumns: pager.gridColumns
-                gridRows: pager.gridRows
-                gridGap: pager.gridGap
-                gridPadding: pager.gridPadding
-                cellWidth: pager.cellWidth
-                cellHeight: pager.cellHeight
+                sourceComponent: deckConfig.pageType(index) === "agents"
+                                 ? agentWorkspaceComponent : dashboardComponent
+
+                Component {
+                    id: dashboardComponent
+                    DashboardPage {
+                        pageIndex: pageLoader.index
+                        gridColumns: pager.gridColumns
+                        gridRows: pager.gridRows
+                        gridGap: pager.gridGap
+                        gridPadding: pager.gridPadding
+                        cellWidth: pager.cellWidth
+                        cellHeight: pager.cellHeight
+                    }
+                }
+
+                Component {
+                    id: agentWorkspaceComponent
+                    AgentWorkspacePage {}
+                }
             }
         }
     }
@@ -124,6 +139,7 @@ Item {
             id: leftEdgeArea
             anchors.fill: parent
             enabled: !editController.editing && pager.pageCount > 1
+                     && deckConfig.pageType(deckConfig.currentPage) !== "agents"
             preventStealing: true
 
             property real startX: 0
@@ -163,6 +179,7 @@ Item {
             id: rightEdgeArea
             anchors.fill: parent
             enabled: !editController.editing && pager.pageCount > 1
+                     && deckConfig.pageType(deckConfig.currentPage) !== "agents"
             preventStealing: true
 
             property real startX: 0
