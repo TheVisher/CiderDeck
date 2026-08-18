@@ -36,12 +36,15 @@
 #include "services/WeatherService.h"
 #include "services/SystemMonitorService.h"
 #include "services/ProcessManagerService.h"
+#include "services/UpdateService.h"
+#include "services/AgentTerminalService.h"
 #include "services/ScreenshotService.h"
 #include "services/BrightnessService.h"
 #include "services/ClipboardService.h"
 #include "services/TimerService.h"
 #include "services/KWinDBusClient.h"
 #include "services/EvdevTouchService.h"
+#include "services/TouchCalibrationService.h"
 #include "viewmodels/TileGridModel.h"
 #include "viewmodels/EditModeController.h"
 #include "viewmodels/ToastModel.h"
@@ -55,6 +58,7 @@ CiderDeckApp::CiderDeckApp(QObject *parent)
 int CiderDeckApp::run(QApplication &app) {
     // Core
     config_ = new DeckConfig(this);
+    config_->ensureAgentWorkspacePage();
     monitorManager_ = new MonitorManager(this);
     themeManager_ = new ThemeManager(config_, this);
 
@@ -67,12 +71,29 @@ int CiderDeckApp::run(QApplication &app) {
     weatherService_ = new WeatherService(this);
     systemMonitor_ = new SystemMonitorService(this);
     processManager_ = new ProcessManagerService(this);
+    updateService_ = new UpdateService(this);
+    agentTerminalService_ = new AgentTerminalService(this);
     screenshotService_ = new ScreenshotService(this);
     brightnessService_ = new BrightnessService(this);
     clipboardService_ = new ClipboardService(this);
     timerService_ = new TimerService(this);
     kwinClient_ = new KWinDBusClient(this);
+    evdevTouch_ = new EvdevTouchService(nullptr, this);
+    touchCalibration_ = new TouchCalibrationService(evdevTouch_, this);
+    connect(evdevTouch_, &EvdevTouchService::rawTouchPressed,
+            touchCalibration_, &TouchCalibrationService::touchPressed);
+    connect(evdevTouch_, &EvdevTouchService::rawTouchMoved,
+            touchCalibration_, &TouchCalibrationService::touchMoved);
+    connect(evdevTouch_, &EvdevTouchService::rawTouchReleased,
+            touchCalibration_, &TouchCalibrationService::touchReleased);
+    connect(evdevTouch_, &EvdevTouchService::activeChanged,
+            touchCalibration_, &TouchCalibrationService::refreshDeviceStatus);
+    connect(evdevTouch_, &EvdevTouchService::devicePathChanged,
+            touchCalibration_, &TouchCalibrationService::refreshDeviceStatus);
+    connect(evdevTouch_, &EvdevTouchService::calibrationChanged,
+            touchCalibration_, &TouchCalibrationService::refreshDeviceStatus);
     kwinClient_->publishService();
+    processManager_->setKWinClient(kwinClient_);
     appLaunchManager_->setKWinClient(kwinClient_);
 
     // ViewModels
@@ -125,6 +146,8 @@ int CiderDeckApp::run(QApplication &app) {
     ctx->setContextProperty("weatherService", weatherService_);
     ctx->setContextProperty("systemMonitor", systemMonitor_);
     ctx->setContextProperty("processManager", processManager_);
+    ctx->setContextProperty("updateService", updateService_);
+    ctx->setContextProperty("agentTerminalService", agentTerminalService_);
     ctx->setContextProperty("screenshotService", screenshotService_);
     ctx->setContextProperty("brightnessService", brightnessService_);
     ctx->setContextProperty("clipboardService", clipboardService_);
@@ -135,6 +158,7 @@ int CiderDeckApp::run(QApplication &app) {
     ctx->setContextProperty("toastModel", toastModel_);
     ctx->setContextProperty("installedAppsModel", installedApps_);
     ctx->setContextProperty("appFilterModel", appFilterModel_);
+    ctx->setContextProperty("touchCalibrationService", touchCalibration_);
     ctx->setContextProperty("deckApp", this);
 
     wireSignals();
@@ -157,7 +181,7 @@ int CiderDeckApp::run(QApplication &app) {
             // Direct evdev touch input for the Xeneon Edge touchscreen.
             // Bypasses the compositor so touch works even when Input Leap
             // has the cursor on another machine.
-            evdevTouch_ = new EvdevTouchService(window, this);
+            evdevTouch_->setWindow(window);
             evdevTouch_->start();
         }
     });
@@ -191,10 +215,7 @@ void CiderDeckApp::wireSignals() {
         toastModel_->showWithAction("Timer finished!", "Add 5min", "timer_add_5", 10000);
     });
 
-    // Screenshot toasts
-    QObject::connect(screenshotService_, &ScreenshotService::screenshotSaved, this, [this](const QString &path) {
-        toastModel_->show(QStringLiteral("Screenshot saved to ") + path, 5000);
-    });
+    // Screenshot errors
     QObject::connect(screenshotService_, &ScreenshotService::screenshotFailed, this, [this](const QString &error) {
         toastModel_->show(QStringLiteral("Screenshot failed: ") + error, 4000);
     });
@@ -287,8 +308,10 @@ void CiderDeckApp::setKeyboardEnabled(bool enabled) {
     auto *lw = LayerShellQt::Window::get(mainWindow_);
     if (!lw) return;
     lw->setKeyboardInteractivity(enabled
-        ? LayerShellQt::Window::KeyboardInteractivityOnDemand
+        ? LayerShellQt::Window::KeyboardInteractivityExclusive
         : LayerShellQt::Window::KeyboardInteractivityNone);
+    if (enabled)
+        mainWindow_->requestActivate();
 #else
     Q_UNUSED(enabled)
 #endif

@@ -36,6 +36,7 @@ Item {
     // Data from services
     readonly property int _audioTick: audioManager ? audioManager.refreshTick : 0
     readonly property var groupList: audioMixerService ? audioMixerService.groups : []
+    readonly property var outputDestinationList: audioMixerService ? audioMixerService.outputDestinations : []
     readonly property int groupCount: groupList.length
     readonly property int generalVolume: audioManager ? audioManager.defaultVolume : 100
     readonly property bool generalMuted: audioManager ? audioManager.defaultMuted : false
@@ -47,6 +48,15 @@ Item {
     // Reassign state
     property string reassignAppName: ""
     property bool reassignVisible: false
+
+    // Output destination picker state. Opening the in-panel card never
+    // requests focus; its controls remain reachable through normal tab order.
+    property int outputPickerGroupIndex: -1
+    property bool outputPickerVisible: false
+    readonly property var outputPickerGroup: outputPickerGroupIndex >= 0
+        && outputPickerGroupIndex < groupList.length
+        ? groupList[outputPickerGroupIndex] : ({})
+    readonly property string currentOutputSinkName: outputPickerGroup.outputSinkName || ""
 
     // Drag state — tracks which group column the drag cursor is over
     property int dragTargetGroup: -1
@@ -78,7 +88,34 @@ Item {
 
     function close() {
         reassignVisible = false
+        outputPickerVisible = false
+        outputPickerGroupIndex = -1
         visible = false
+    }
+
+    function openOutputPicker(groupIndex) {
+        reassignVisible = false
+        outputPickerGroupIndex = groupIndex
+        outputPickerVisible = true
+    }
+
+    function closeOutputPicker() {
+        outputPickerVisible = false
+        outputPickerGroupIndex = -1
+    }
+
+    function activatePickerControl(event, control) {
+        if (event.key === Qt.Key_Escape) {
+            closeOutputPicker()
+            event.accepted = true
+            return
+        }
+        if (event.key === Qt.Key_Return
+                || event.key === Qt.Key_Enter
+                || event.key === Qt.Key_Space) {
+            control.activate()
+            event.accepted = true
+        }
     }
 
     // Delay showing by one frame so blur snapshot captures clean scene
@@ -95,7 +132,7 @@ Item {
         ShaderEffectSource {
             id: blurSource
             anchors.fill: parent
-            sourceItem: dashboard
+            sourceItem: pagePager
             live: false
             visible: false
         }
@@ -271,6 +308,11 @@ Item {
                             readonly property int grpVol: isGen ? mixerOverlay.generalVolume : (grp.volume || 0)
                             readonly property bool grpMuted: isGen ? mixerOverlay.generalMuted : (grp.muted || false)
                             readonly property int groupIdx: index
+                            readonly property string outputLabel: !grp.outputSinkName
+                                ? "System output"
+                                : grp.outputAvailable === false
+                                    ? "Unavailable · " + grp.outputSinkName
+                                    : (grp.outputDescription || grp.outputSinkName)
 
                             // Running apps for this group
                             readonly property var displayApps: {
@@ -334,6 +376,66 @@ Item {
                                     horizontalAlignment: Text.AlignHCenter
                                 }
 
+                                // Current output and touch-first destination picker.
+                                Rectangle {
+                                    id: outputPickerButton
+                                    width: parent.width
+                                    height: 44
+                                    radius: 8
+                                    color: outputPickerArea.containsMouse || activeFocus
+                                        ? themeManager.overlayColor
+                                        : Qt.rgba(themeManager.textColor.r,
+                                                  themeManager.textColor.g,
+                                                  themeManager.textColor.b, 0.06)
+                                    border.width: grp.outputAvailable === false || activeFocus ? 1 : 0
+                                    border.color: grp.outputAvailable === false
+                                        ? themeManager.errorColor : themeManager.accentColor
+                                    activeFocusOnTab: true
+                                    Accessible.role: Accessible.Button
+                                    Accessible.name: "Choose output for " + (grp.name || "group")
+                                        + ". Current: " + outputLabel
+                                    Accessible.onPressAction: outputPickerButton.activate()
+                                    Keys.onPressed: (event) => mixerOverlay.activatePickerControl(event, outputPickerButton)
+
+                                    function activate() {
+                                        mixerOverlay.openOutputPicker(groupIdx)
+                                    }
+
+                                    Row {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 10
+                                        anchors.rightMargin: 8
+                                        spacing: 7
+
+                                        LucideIcon {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            width: 16; height: 16
+                                            source: "qrc:/icons/lucide/volume-2.svg"
+                                            color: grp.outputAvailable === false
+                                                ? themeManager.errorColor
+                                                : themeManager.secondaryTextColor
+                                        }
+
+                                        Text {
+                                            width: parent.width - 16 - 7
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            text: outputLabel
+                                            color: grp.outputAvailable === false
+                                                ? themeManager.errorColor
+                                                : themeManager.textColor
+                                            font.pixelSize: 10
+                                            elide: Text.ElideRight
+                                        }
+                                    }
+
+                                    MouseArea {
+                                        id: outputPickerArea
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        onClicked: outputPickerButton.activate()
+                                    }
+                                }
+
                                 // Mute button
                                 Item {
                                     width: parent.width
@@ -378,6 +480,7 @@ Item {
                                     width: parent.width
                                     height: parent.height
                                            - 16 - 4   // name
+                                           - 44 - 4   // output picker
                                            - 28 - 4   // mute
                                            - grpPctText.height - 4 // percent
                                            - appBox.height         // app box
@@ -828,6 +931,244 @@ Item {
                                     audioMixerService.moveAppToGroup(mixerOverlay.reassignAppName, index)
                                     mixerOverlay.reassignVisible = false
                                 }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ─── Output destination picker ───
+        MouseArea {
+            anchors.fill: parent
+            visible: mixerOverlay.outputPickerVisible
+            z: 110
+            onClicked: mixerOverlay.closeOutputPicker()
+        }
+
+        Rectangle {
+            id: outputPickerCard
+            visible: mixerOverlay.outputPickerVisible
+            z: 120
+            anchors.centerIn: parent
+            width: Math.min(420, panel.width - 48)
+            height: Math.min(panel.height - 48,
+                             70 + (mixerOverlay.outputDestinationList.length + 1
+                                   + (mixerOverlay.outputPickerGroup.outputAvailable === false ? 1 : 0)) * 52)
+            radius: 12
+            color: themeManager.backgroundColor
+            border.width: 1
+            border.color: themeManager.borderColor
+
+            Text {
+                id: outputPickerTitle
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.margins: 14
+                height: 28
+                text: "Output for " + (mixerOverlay.outputPickerGroup.name || "group")
+                color: themeManager.textColor
+                font.pixelSize: 14
+                font.bold: true
+                elide: Text.ElideRight
+                verticalAlignment: Text.AlignVCenter
+            }
+
+            Flickable {
+                anchors.top: outputPickerTitle.bottom
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.margins: 14
+                anchors.topMargin: 6
+                clip: true
+                contentHeight: outputChoices.height
+                flickableDirection: Flickable.VerticalFlick
+
+                Column {
+                    id: outputChoices
+                    width: parent.width
+                    spacing: 4
+
+                    Rectangle {
+                        id: unavailableOutputChoice
+                        width: parent.width
+                        height: visible ? 48 : 0
+                        visible: mixerOverlay.outputPickerGroup.outputAvailable === false
+                        radius: 8
+                        color: Qt.rgba(themeManager.errorColor.r,
+                                       themeManager.errorColor.g,
+                                       themeManager.errorColor.b, 0.10)
+                        border.width: 1
+                        border.color: themeManager.errorColor
+
+                        Row {
+                            anchors.fill: parent
+                            anchors.leftMargin: 12
+                            anchors.rightMargin: 12
+                            spacing: 10
+
+                            LucideIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 18; height: 18
+                                source: "qrc:/icons/lucide/volume-x.svg"
+                                color: themeManager.errorColor
+                            }
+
+                            Text {
+                                width: parent.width - 28
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: "Unavailable · " + mixerOverlay.currentOutputSinkName
+                                color: themeManager.errorColor
+                                font.pixelSize: 12
+                                elide: Text.ElideMiddle
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        id: systemOutputChoice
+                        readonly property bool selected: mixerOverlay.currentOutputSinkName === ""
+                        width: parent.width
+                        height: 48
+                        radius: 8
+                        color: selected
+                            ? Qt.rgba(themeManager.accentColor.r,
+                                      themeManager.accentColor.g,
+                                      themeManager.accentColor.b, 0.18)
+                            : systemOutputArea.containsMouse || activeFocus
+                                ? themeManager.overlayColor : "transparent"
+                        border.width: selected || activeFocus ? 1 : 0
+                        border.color: themeManager.accentColor
+                        activeFocusOnTab: true
+                        Accessible.role: Accessible.Button
+                        Accessible.name: "Use System output"
+                            + (selected ? ", selected" : "")
+                        Accessible.onPressAction: systemOutputChoice.activate()
+                        Keys.onPressed: (event) => mixerOverlay.activatePickerControl(event, systemOutputChoice)
+
+                        function activate() {
+                            audioMixerService.setGroupOutput(mixerOverlay.outputPickerGroupIndex, "")
+                            mixerOverlay.closeOutputPicker()
+                        }
+
+                        Row {
+                            anchors.fill: parent
+                            anchors.leftMargin: 12
+                            anchors.rightMargin: 12
+                            spacing: 10
+
+                            LucideIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 18; height: 18
+                                source: "qrc:/icons/lucide/volume-2.svg"
+                                color: systemOutputChoice.selected
+                                    ? themeManager.accentColor
+                                    : themeManager.secondaryTextColor
+                            }
+
+                            Text {
+                                width: parent.width - 18 - 18 - 20
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: "System output"
+                                color: systemOutputChoice.selected
+                                    ? themeManager.accentColor
+                                    : themeManager.textColor
+                                font.pixelSize: 12
+                                font.weight: systemOutputChoice.selected ? Font.DemiBold : Font.Normal
+                                elide: Text.ElideRight
+                            }
+
+                            LucideIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 18; height: 18
+                                visible: systemOutputChoice.selected
+                                source: "qrc:/icons/lucide/check.svg"
+                                color: themeManager.accentColor
+                            }
+                        }
+
+                        MouseArea {
+                            id: systemOutputArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onClicked: systemOutputChoice.activate()
+                        }
+                    }
+
+                    Repeater {
+                        model: mixerOverlay.outputDestinationList
+
+                        Rectangle {
+                            id: destinationOutputChoice
+                            required property var modelData
+                            readonly property bool selected: mixerOverlay.currentOutputSinkName === modelData.name
+                            width: parent.width
+                            height: 48
+                            radius: 8
+                            color: selected
+                                ? Qt.rgba(themeManager.accentColor.r,
+                                          themeManager.accentColor.g,
+                                          themeManager.accentColor.b, 0.18)
+                                : destinationOutputArea.containsMouse || activeFocus
+                                    ? themeManager.overlayColor : "transparent"
+                            border.width: selected || activeFocus ? 1 : 0
+                            border.color: themeManager.accentColor
+                            activeFocusOnTab: true
+                            Accessible.role: Accessible.Button
+                            Accessible.name: "Use output " + (modelData.description || modelData.name)
+                                + (selected ? ", selected" : "")
+                            Accessible.onPressAction: destinationOutputChoice.activate()
+                            Keys.onPressed: (event) => mixerOverlay.activatePickerControl(event, destinationOutputChoice)
+
+                            function activate() {
+                                audioMixerService.setGroupOutput(
+                                    mixerOverlay.outputPickerGroupIndex, modelData.name)
+                                mixerOverlay.closeOutputPicker()
+                            }
+
+                            Row {
+                                anchors.fill: parent
+                                anchors.leftMargin: 12
+                                anchors.rightMargin: 12
+                                spacing: 10
+
+                                LucideIcon {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: 18; height: 18
+                                    source: "qrc:/icons/lucide/volume-2.svg"
+                                    color: destinationOutputChoice.selected
+                                        ? themeManager.accentColor
+                                        : themeManager.secondaryTextColor
+                                }
+
+                                Text {
+                                    width: parent.width - 18 - 18 - 20
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: modelData.description || modelData.name
+                                    color: destinationOutputChoice.selected
+                                        ? themeManager.accentColor
+                                        : themeManager.textColor
+                                    font.pixelSize: 12
+                                    font.weight: destinationOutputChoice.selected ? Font.DemiBold : Font.Normal
+                                    elide: Text.ElideRight
+                                }
+
+                                LucideIcon {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: 18; height: 18
+                                    visible: destinationOutputChoice.selected
+                                    source: "qrc:/icons/lucide/check.svg"
+                                    color: themeManager.accentColor
+                                }
+                            }
+
+                            MouseArea {
+                                id: destinationOutputArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                onClicked: destinationOutputChoice.activate()
                             }
                         }
                     }

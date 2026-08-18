@@ -1,10 +1,13 @@
 #include "DeckConfig.h"
 
 #include <QDir>
+#include <QDateTime>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSaveFile>
 #include <QStandardPaths>
 #include <QUuid>
 
@@ -20,6 +23,7 @@ QJsonObject PageData::toJson() const {
     return {
         {"id", id},
         {"name", name},
+        {"type", type},
         {"tiles", tilesArray},
     };
 }
@@ -28,6 +32,7 @@ PageData PageData::fromJson(const QJsonObject &obj) {
     PageData page;
     page.id = obj["id"].toString();
     page.name = obj["name"].toString();
+    page.type = obj["type"].toString(QStringLiteral("dashboard"));
     const auto tilesArray = obj["tiles"].toArray();
     for (const auto &val : tilesArray) {
         page.tiles.append(TileData::fromJson(val.toObject()));
@@ -40,11 +45,18 @@ PageData PageData::fromJson(const QJsonObject &obj) {
 DeckConfig::DeckConfig(QObject *parent)
     : QObject(parent) {
     load();
+    bool pageOk = false;
+    const int previewPage = qEnvironmentVariableIntValue("CIDERDECK_PREVIEW_PAGE", &pageOk);
+    if (pageOk)
+        currentPage_ = qBound(0, previewPage, pages_.size() - 1);
 }
 
 QString DeckConfig::configPath() const {
-    const QString dir = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation)
-                        + QStringLiteral("/ciderdeck");
+    const QString overrideDir = qEnvironmentVariable("CIDERDECK_CONFIG_DIR");
+    const QString dir = overrideDir.isEmpty()
+        ? QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation)
+              + QStringLiteral("/ciderdeck")
+        : overrideDir;
     QDir().mkpath(dir);
     return dir + QStringLiteral("/config.json");
 }
@@ -128,9 +140,10 @@ void DeckConfig::save() {
     root["global"] = global;
     root["pages"] = pagesArray;
 
-    QFile file(configPath());
+    QSaveFile file(configPath());
     if (file.open(QIODevice::WriteOnly)) {
         file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+        file.commit();
     }
 }
 
@@ -153,12 +166,45 @@ bool DeckConfig::importConfig(const QString &path) {
         return false;
     }
 
-    QFile dest(configPath());
+    backupConfig(QStringLiteral("before-import"));
+    QSaveFile dest(configPath());
     if (dest.open(QIODevice::WriteOnly)) {
         dest.write(QJsonDocument(doc.object()).toJson(QJsonDocument::Indented));
+        if (!dest.commit())
+            return false;
+    } else {
+        return false;
     }
 
     load();
+    return true;
+}
+
+bool DeckConfig::backupConfig(const QString &reason) const {
+    const QString sourcePath = configPath();
+    if (!QFileInfo::exists(sourcePath))
+        return false;
+
+    const QFileInfo sourceInfo(sourcePath);
+    QDir backupDir(sourceInfo.dir().filePath(QStringLiteral("backups")));
+    if (!backupDir.exists() && !sourceInfo.dir().mkpath(QStringLiteral("backups")))
+        return false;
+
+    const QString timestamp = QDateTime::currentDateTime().toString(
+        QStringLiteral("yyyyMMdd-HHmmss-zzz"));
+    const QString unique = QUuid::createUuid().toString(QUuid::WithoutBraces).left(8);
+    const QString backupName = QStringLiteral("config-%1-%2-%3.json")
+                                   .arg(reason, timestamp, unique);
+    if (!QFile::copy(sourcePath, backupDir.filePath(backupName)))
+        return false;
+
+    const QFileInfoList backups = backupDir.entryInfoList(
+        {QStringLiteral("config-*.json")},
+        QDir::Files,
+        QDir::Time);
+    constexpr int maxBackups = 20;
+    for (int i = maxBackups; i < backups.size(); ++i)
+        QFile::remove(backups[i].absoluteFilePath());
     return true;
 }
 
@@ -171,18 +217,83 @@ void DeckConfig::addPage(const QString &name) {
     save();
 }
 
+int DeckConfig::ensureAgentWorkspacePage() {
+    for (int i = 0; i < pages_.size(); ++i) {
+        if (pages_[i].type == QStringLiteral("agents"))
+            return i;
+    }
+
+    PageData page;
+    page.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    page.name = QStringLiteral("Agents");
+    page.type = QStringLiteral("agents");
+    pages_.append(page);
+    emit pagesChanged();
+    save();
+    return pages_.size() - 1;
+}
+
 void DeckConfig::removePage(int index) {
     if (index < 0 || index >= pages_.size() || pages_.size() <= 1) {
         return;
     }
+
+    backupConfig(QStringLiteral("before-page-delete"));
+    const int oldCurrentPage = currentPage_;
     pages_.removeAt(index);
-    if (currentPage_ >= pages_.size()) {
-        currentPage_ = pages_.size() - 1;
-        emit currentPageChanged();
+
+    if (index < currentPage_) {
+        --currentPage_;
+    } else if (index == currentPage_) {
+        currentPage_ = qMin(index, pages_.size() - 1);
     }
+    if (currentPage_ != oldCurrentPage)
+        emit currentPageChanged();
+
     emit pagesChanged();
     emit tilesChanged();
     save();
+}
+
+bool DeckConfig::movePage(int fromIndex, int toIndex) {
+    if (fromIndex < 0 || fromIndex >= pages_.size()
+        || toIndex < 0 || toIndex >= pages_.size()
+        || fromIndex == toIndex) {
+        return false;
+    }
+
+    pages_.move(fromIndex, toIndex);
+
+    const int oldCurrentPage = currentPage_;
+    if (currentPage_ == fromIndex) {
+        currentPage_ = toIndex;
+    } else if (fromIndex < currentPage_ && toIndex >= currentPage_) {
+        --currentPage_;
+    } else if (fromIndex > currentPage_ && toIndex <= currentPage_) {
+        ++currentPage_;
+    }
+
+    if (currentPage_ != oldCurrentPage)
+        emit currentPageChanged();
+    emit pagesChanged();
+    emit tilesChanged();
+    save();
+    return true;
+}
+
+QStringList DeckConfig::pageNames() const {
+    QStringList names;
+    names.reserve(pages_.size());
+    for (const auto &page : pages_) {
+        names.append(page.name);
+    }
+    return names;
+}
+
+QString DeckConfig::pageType(int page) const {
+    if (page < 0 || page >= pages_.size())
+        return QStringLiteral("dashboard");
+    return pages_[page].type;
 }
 
 QVariantList DeckConfig::tilesForPage(int page) const {
@@ -267,6 +378,80 @@ void DeckConfig::moveTile(const QString &tileId, int col, int row) {
             }
         }
     }
+}
+
+bool DeckConfig::moveTileToPage(const QString &tileId, int targetPage) {
+    if (targetPage < 0 || targetPage >= pages_.size()) {
+        return false;
+    }
+
+    const int sourcePage = findTilePage(tileId);
+    if (sourcePage < 0) {
+        return false;
+    }
+    if (sourcePage == targetPage) {
+        return true;
+    }
+
+    int sourceIndex = -1;
+    for (int i = 0; i < pages_[sourcePage].tiles.size(); ++i) {
+        if (pages_[sourcePage].tiles[i].id == tileId) {
+            sourceIndex = i;
+            break;
+        }
+    }
+    if (sourceIndex < 0) {
+        return false;
+    }
+
+    TileData movedTile = pages_[sourcePage].tiles[sourceIndex];
+    const auto positionIsFree = [this, targetPage, &movedTile](int col, int row) {
+        if (col < 0 || row < 0 ||
+            col + movedTile.colSpan > gridColumns_ ||
+            row + movedTile.rowSpan > gridRows_) {
+            return false;
+        }
+
+        for (const auto &tile : pages_[targetPage].tiles) {
+            const bool overlaps = !(col + movedTile.colSpan <= tile.col ||
+                                    tile.col + tile.colSpan <= col ||
+                                    row + movedTile.rowSpan <= tile.row ||
+                                    tile.row + tile.rowSpan <= row);
+            if (overlaps) {
+                return false;
+            }
+        }
+        return true;
+    };
+
+    int destinationCol = -1;
+    int destinationRow = -1;
+    if (positionIsFree(movedTile.col, movedTile.row)) {
+        destinationCol = movedTile.col;
+        destinationRow = movedTile.row;
+    } else {
+        for (int row = 0; row <= gridRows_ - movedTile.rowSpan && destinationCol < 0; ++row) {
+            for (int col = 0; col <= gridColumns_ - movedTile.colSpan; ++col) {
+                if (positionIsFree(col, row)) {
+                    destinationCol = col;
+                    destinationRow = row;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (destinationCol < 0) {
+        return false;
+    }
+
+    movedTile.col = destinationCol;
+    movedTile.row = destinationRow;
+    pages_[sourcePage].tiles.removeAt(sourceIndex);
+    pages_[targetPage].tiles.append(movedTile);
+    emit tilesChanged();
+    save();
+    return true;
 }
 
 void DeckConfig::resizeTile(const QString &tileId, int colSpan, int rowSpan) {

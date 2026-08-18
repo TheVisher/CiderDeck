@@ -11,8 +11,9 @@ int main(int argc, char *argv[]) {
     ));
 
     QApplication app(argc, argv);
-    app.setApplicationName("ciderdeck");
-    app.setApplicationDisplayName("CiderDeck");
+    const bool previewMode = qEnvironmentVariableIsSet("CIDERDECK_PREVIEW");
+    app.setApplicationName(previewMode ? "ciderdeck-next" : "ciderdeck");
+    app.setApplicationDisplayName(previewMode ? "CiderDeck Next" : "CiderDeck");
     app.setOrganizationName("ciderdeck");
     app.setDesktopFileName("ciderdeck");
     app.setQuitOnLastWindowClosed(false);

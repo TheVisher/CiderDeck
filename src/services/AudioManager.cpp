@@ -1,4 +1,5 @@
 #include "AudioManager.h"
+#include "AudioRoutingPolicy.h"
 
 #ifdef HAVE_KF6PULSEAUDIOQT
 #include <PulseAudioQt/context.h>
@@ -44,6 +45,14 @@ AudioManager::AudioManager(QObject *parent)
     connect(sinkInputModel_, &QAbstractItemModel::rowsRemoved,  this, bumpTick);
     connect(sinkInputModel_, &QAbstractItemModel::dataChanged,  this, bumpTick);
 
+    // ASM's virtual sinks can be recreated when its filter chain restarts.
+    // Reconnect to the current default and keep all three virtual channels at
+    // the same master level whenever the sink model changes.
+    auto reconnectMaster = [this]() { connectToDefaultSink(); };
+    connect(sinkModel_, &QAbstractItemModel::rowsInserted, this, reconnectMaster);
+    connect(sinkModel_, &QAbstractItemModel::rowsRemoved, this, reconnectMaster);
+    connect(sinkModel_, &QAbstractItemModel::dataChanged, this, reconnectMaster);
+
     // Try immediately in case context is already ready
     connectToDefaultSink();
 #endif
@@ -83,6 +92,32 @@ void AudioManager::connectToDefaultSink() {
     updateFromDefaultSink();
 }
 
+void AudioManager::syncAsmVirtualSinks()
+{
+    if (!currentDefaultSink_
+        || !audio::isAsmVirtualSinkName(currentDefaultSink_->name())) {
+        return;
+    }
+
+    const qint64 masterVolume = currentDefaultSink_->volume();
+    const bool masterMuted = currentDefaultSink_->isMuted();
+    for (int i = 0; i < sinkModel_->rowCount(); ++i) {
+        const auto sinkIndex = sinkModel_->index(i, 0);
+        auto *sink = sinkIndex.data(PulseAudioQt::AbstractModel::PulseObjectRole)
+                         .value<PulseAudioQt::Sink *>();
+        if (!sink || sink == currentDefaultSink_
+            || !audio::isAsmVirtualSinkName(sink->name())) {
+            continue;
+        }
+        if (sink->volume() != masterVolume) {
+            sink->setVolume(masterVolume);
+        }
+        if (sink->isMuted() != masterMuted) {
+            sink->setMuted(masterMuted);
+        }
+    }
+}
+
 void AudioManager::updateFromDefaultSink() {
     if (!currentDefaultSink_) return;
 
@@ -100,6 +135,11 @@ void AudioManager::updateFromDefaultSink() {
         defaultMuted_ = muted;
         emit defaultMutedChanged();
     }
+
+    // KDE's built-in volume control changes only the current default ASM sink.
+    // Treat that value as the shared ASM master so Game, Media, and Chat follow
+    // it while their application-level category trims remain independent.
+    syncAsmVirtualSinks();
 }
 #endif
 
@@ -141,7 +181,19 @@ void AudioManager::setDefaultVolume(int percent) {
     percent = qBound(0, percent, 150);
     qint64 normalVol = PulseAudioQt::normalVolume();
     qint64 paVolume = static_cast<qint64>(percent) * normalVol / 100;
-    currentDefaultSink_->setVolume(paVolume);
+    if (audio::isAsmVirtualSinkName(currentDefaultSink_->name())) {
+        for (int i = 0; i < sinkModel_->rowCount(); ++i) {
+            const auto sinkIndex = sinkModel_->index(i, 0);
+            auto *sink = sinkIndex.data(PulseAudioQt::AbstractModel::PulseObjectRole)
+                             .value<PulseAudioQt::Sink *>();
+            if (sink && audio::isAsmVirtualSinkName(sink->name())
+                && sink->volume() != paVolume) {
+                sink->setVolume(paVolume);
+            }
+        }
+    } else if (currentDefaultSink_->volume() != paVolume) {
+        currentDefaultSink_->setVolume(paVolume);
+    }
 #else
     Q_UNUSED(percent)
 #endif
@@ -150,7 +202,19 @@ void AudioManager::setDefaultVolume(int percent) {
 void AudioManager::setDefaultMuted(bool muted) {
 #ifdef HAVE_KF6PULSEAUDIOQT
     if (!currentDefaultSink_) return;
-    currentDefaultSink_->setMuted(muted);
+    if (audio::isAsmVirtualSinkName(currentDefaultSink_->name())) {
+        for (int i = 0; i < sinkModel_->rowCount(); ++i) {
+            const auto sinkIndex = sinkModel_->index(i, 0);
+            auto *sink = sinkIndex.data(PulseAudioQt::AbstractModel::PulseObjectRole)
+                             .value<PulseAudioQt::Sink *>();
+            if (sink && audio::isAsmVirtualSinkName(sink->name())
+                && sink->isMuted() != muted) {
+                sink->setMuted(muted);
+            }
+        }
+    } else if (currentDefaultSink_->isMuted() != muted) {
+        currentDefaultSink_->setMuted(muted);
+    }
 #else
     Q_UNUSED(muted)
 #endif

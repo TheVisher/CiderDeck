@@ -8,6 +8,7 @@
 #include <QDir>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QCoreApplication>
 #include <QTemporaryFile>
 #include <QUuid>
 #include <QTextStream>
@@ -47,6 +48,10 @@ function ciderdeckDebug(msg) {
 KWinDBusClient::KWinDBusClient(QObject *parent)
     : QObject(parent) {}
 
+KWinDBusClient::~KWinDBusClient() {
+    stopWindowMonitor();
+}
+
 bool KWinDBusClient::publishService() {
     if (servicePublished_) return true;
 
@@ -64,7 +69,64 @@ bool KWinDBusClient::publishService() {
 
     servicePublished_ = true;
     qInfo() << "[KWinDBusClient] DBus bridge ready: org.ciderdeck.App /CiderDeck";
+    startWindowMonitor();
     return true;
+}
+
+bool KWinDBusClient::startWindowMonitor() {
+    QString scriptPath = qEnvironmentVariable("CIDERDECK_KWIN_SCRIPT");
+    if (scriptPath.isEmpty()) {
+        const QString developmentPath = QDir(QCoreApplication::applicationDirPath())
+                                            .absoluteFilePath(QStringLiteral("../kwin-scripts/ciderdeck-bridge.js"));
+        if (QFile::exists(developmentPath))
+            scriptPath = developmentPath;
+    }
+    if (scriptPath.isEmpty()) {
+        const QString installedPath = QStringLiteral("/usr/share/ciderdeck/kwin-scripts/ciderdeck-bridge.js");
+        if (QFile::exists(installedPath))
+            scriptPath = installedPath;
+    }
+    if (scriptPath.isEmpty()) {
+        emit bridgeError(QStringLiteral("KWin monitor script not found"));
+        return false;
+    }
+
+    QDBusInterface scripting(
+        QStringLiteral("org.kde.KWin"),
+        QStringLiteral("/Scripting"),
+        QStringLiteral("org.kde.kwin.Scripting"),
+        QDBusConnection::sessionBus());
+    if (!scripting.isValid())
+        return false;
+
+    const QString pluginName = QStringLiteral("ciderdeck-window-monitor");
+    scripting.call(QStringLiteral("unloadScript"), pluginName);
+    const QDBusReply<int> loadReply = scripting.call(QStringLiteral("loadScript"), scriptPath, pluginName);
+    if (!loadReply.isValid()) {
+        emit bridgeError(QStringLiteral("Failed to load KWin monitor: ") + loadReply.error().message());
+        return false;
+    }
+
+    const QDBusMessage startReply = scripting.call(QStringLiteral("start"));
+    if (startReply.type() == QDBusMessage::ErrorMessage) {
+        emit bridgeError(QStringLiteral("Failed to start KWin monitor: ") + startReply.errorMessage());
+        return false;
+    }
+    monitorLoaded_ = true;
+    return true;
+}
+
+void KWinDBusClient::stopWindowMonitor() {
+    if (!monitorLoaded_)
+        return;
+    QDBusInterface scripting(
+        QStringLiteral("org.kde.KWin"),
+        QStringLiteral("/Scripting"),
+        QStringLiteral("org.kde.kwin.Scripting"),
+        QDBusConnection::sessionBus());
+    if (scripting.isValid())
+        scripting.call(QStringLiteral("unloadScript"), QStringLiteral("ciderdeck-window-monitor"));
+    monitorLoaded_ = false;
 }
 
 bool KWinDBusClient::sendCommand(const QString &method, const QVariantList &arguments) {
@@ -84,6 +146,7 @@ var windows = workspace.windowList()
             pid: Number(w.pid || 0),
             outputName: String(w.output ? w.output.name : ""),
             minimized: Boolean(w.minimized),
+            unresponsive: Boolean(w.unresponsive),
             active: Boolean(activeWin && String(w.internalId) === String(activeWin.internalId))
         };
     });
@@ -262,6 +325,69 @@ bool KWinDBusClient::activateWindowById(const QString &windowId) {
 
 bool KWinDBusClient::moveWindowToScreen(const QString &windowId, const QString &screenName) {
     return sendCommand(QStringLiteral("ciderdeckMoveToScreen"), {windowId, screenName});
+}
+
+bool KWinDBusClient::invokeKWinShortcut(const QString &shortcutName) {
+    QDBusInterface component(
+        QStringLiteral("org.kde.kglobalaccel"),
+        QStringLiteral("/component/kwin"),
+        QStringLiteral("org.kde.kglobalaccel.Component"),
+        QDBusConnection::sessionBus());
+
+    if (!component.isValid()) {
+        emit bridgeError(QStringLiteral("KDE shortcut service unavailable"));
+        return false;
+    }
+
+    const QDBusMessage result = component.call(
+        QStringLiteral("invokeShortcut"), shortcutName);
+    if (result.type() == QDBusMessage::ErrorMessage) {
+        emit bridgeError(QStringLiteral("Failed to invoke KDE action '%1': %2")
+                         .arg(shortcutName, result.errorMessage()));
+        return false;
+    }
+    return true;
+}
+
+bool KWinDBusClient::toggleShowDesktop() {
+    auto bus = QDBusConnection::sessionBus();
+    QDBusInterface kwin(
+        QStringLiteral("org.kde.KWin"),
+        QStringLiteral("/KWin"),
+        QStringLiteral("org.kde.KWin"),
+        bus);
+    if (!kwin.isValid()) {
+        emit bridgeError(QStringLiteral("KWin D-Bus interface unavailable"));
+        return false;
+    }
+
+    const QVariant showingDesktop = kwin.property("showingDesktop");
+    if (!showingDesktop.isValid()) {
+        emit bridgeError(QStringLiteral("Failed to read KWin desktop state"));
+        return false;
+    }
+
+    // Plasma's registered action reliably enters Peek at Desktop. On this
+    // setup, leaving it is more reliable through KWin's explicit false state.
+    if (showingDesktop.toBool()) {
+        QDBusMessage message = QDBusMessage::createMethodCall(
+            QStringLiteral("org.kde.KWin"),
+            QStringLiteral("/KWin"),
+            QStringLiteral("org.kde.KWin"),
+            QStringLiteral("showDesktop"));
+        message << false;
+        if (!bus.send(message)) {
+            emit bridgeError(QStringLiteral("Failed to restore windows after Show Desktop"));
+            return false;
+        }
+        return true;
+    }
+
+    return invokeKWinShortcut(QStringLiteral("Show Desktop"));
+}
+
+bool KWinDBusClient::toggleOverview() {
+    return invokeKWinShortcut(QStringLiteral("Overview"));
 }
 
 bool KWinDBusClient::isAppRunning(const QString &resourceClass) const {

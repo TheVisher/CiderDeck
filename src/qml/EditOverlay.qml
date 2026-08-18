@@ -9,6 +9,12 @@ Item {
     property int rowValue: 0
     property int colSpanValue: 1
     property int rowSpanValue: 1
+    required property real cellWidth
+    required property real cellHeight
+    required property int gridGap
+    required property int gridPadding
+    property real grabOffsetX: 0
+    property real grabOffsetY: 0
 
     visible: editMode
 
@@ -71,10 +77,10 @@ Item {
             }
 
             onPositionChanged: (mouse) => {
-                let globalPos = resizeArea.mapToItem(null, mouse.x, mouse.y)
-                editController.updateResize(globalPos.x, globalPos.y,
-                                             root.cellWidth, root.cellHeight,
-                                             root.gridGap, root.gridPadding)
+                let windowPos = resizeArea.mapToItem(null, mouse.x, mouse.y)
+                editController.updateResize(windowPos.x, windowPos.y,
+                                             overlay.cellWidth, overlay.cellHeight,
+                                             overlay.gridGap, overlay.gridPadding)
             }
 
             onReleased: {
@@ -115,19 +121,21 @@ Item {
         enabled: overlay.editMode
 
         onPressed: (mouse) => {
-            let globalPos = dragArea.mapToItem(null, mouse.x, mouse.y)
+            let pointerPos = dragArea.mapToItem(null, mouse.x, mouse.y)
+            let tilePos = overlay.mapToItem(null, 0, 0)
+            overlay.grabOffsetX = pointerPos.x - tilePos.x
+            overlay.grabOffsetY = pointerPos.y - tilePos.y
             editController.beginDrag(overlay.tileId, overlay.colValue, overlay.rowValue,
                                       overlay.colSpanValue, overlay.rowSpanValue,
-                                      globalPos.x, globalPos.y,
-                                      root.cellWidth, root.cellHeight,
-                                      root.gridGap, root.gridPadding)
+                                      tilePos.x, tilePos.y)
         }
 
         onPositionChanged: (mouse) => {
-            let globalPos = dragArea.mapToItem(null, mouse.x, mouse.y)
-            editController.updateDrag(globalPos.x, globalPos.y,
-                                       root.cellWidth, root.cellHeight,
-                                       root.gridGap, root.gridPadding)
+            let pointerPos = dragArea.mapToItem(null, mouse.x, mouse.y)
+            editController.updateDrag(pointerPos.x - overlay.grabOffsetX,
+                                       pointerPos.y - overlay.grabOffsetY,
+                                       overlay.cellWidth, overlay.cellHeight,
+                                       overlay.gridGap, overlay.gridPadding)
         }
 
         onReleased: {

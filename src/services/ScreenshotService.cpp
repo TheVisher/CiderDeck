@@ -2,68 +2,63 @@
 
 #include <QDBusConnection>
 #include <QDBusInterface>
+#include <QDBusMessage>
+#include <QDBusObjectPath>
 #include <QDBusReply>
-#include <QDir>
-#include <QDateTime>
-#include <QStandardPaths>
+#include <QStringList>
 
 namespace ciderdeck {
 
 ScreenshotService::ScreenshotService(QObject *parent)
     : QObject(parent) {}
 
-void ScreenshotService::captureScreen(const QString &monitor) {
-    Q_UNUSED(monitor)
+bool ScreenshotService::triggerShortcut() {
+    constexpr int shortcutKey = static_cast<int>(Qt::MetaModifier)
+                              | static_cast<int>(Qt::ShiftModifier)
+                              | static_cast<int>(Qt::Key_S);
 
-    QDBusInterface portal("org.freedesktop.portal.Desktop",
-                          "/org/freedesktop/portal/desktop",
-                          "org.freedesktop.portal.Screenshot",
-                          QDBusConnection::sessionBus());
-
-    if (!portal.isValid()) {
-        emit screenshotFailed("Screenshot portal not available");
-        return;
+    QDBusInterface globalAccel(
+        QStringLiteral("org.kde.kglobalaccel"),
+        QStringLiteral("/kglobalaccel"),
+        QStringLiteral("org.kde.KGlobalAccel"),
+        QDBusConnection::sessionBus());
+    if (!globalAccel.isValid()) {
+        emit screenshotFailed(QStringLiteral("KDE global shortcuts are unavailable"));
+        return false;
     }
 
-    QVariantMap options;
-    options["interactive"] = false;
-
-    QDBusReply<QDBusObjectPath> reply = portal.call("Screenshot", "", options);
-    if (reply.isValid()) {
-        emit screenshotSaved(savePath());
-    } else {
-        emit screenshotFailed("Screenshot failed");
-    }
-}
-
-void ScreenshotService::captureRegion() {
-    QDBusInterface portal("org.freedesktop.portal.Desktop",
-                          "/org/freedesktop/portal/desktop",
-                          "org.freedesktop.portal.Screenshot",
-                          QDBusConnection::sessionBus());
-
-    if (!portal.isValid()) {
-        emit screenshotFailed("Screenshot portal not available");
-        return;
+    const QDBusReply<QStringList> actionReply = globalAccel.call(
+        QStringLiteral("action"), shortcutKey);
+    if (!actionReply.isValid() || actionReply.value().size() < 2) {
+        emit screenshotFailed(QStringLiteral("No action is assigned to Meta+Shift+S"));
+        return false;
     }
 
-    QVariantMap options;
-    options["interactive"] = true;
-
-    QDBusReply<QDBusObjectPath> reply = portal.call("Screenshot", "", options);
-    if (reply.isValid()) {
-        emit screenshotSaved(savePath());
-    } else {
-        emit screenshotFailed("Region capture failed");
+    const QString componentName = actionReply.value().at(0);
+    const QString actionName = actionReply.value().at(1);
+    const QDBusReply<QDBusObjectPath> componentReply = globalAccel.call(
+        QStringLiteral("getComponent"), componentName);
+    if (!componentReply.isValid()) {
+        emit screenshotFailed(QStringLiteral("Could not find the configured screenshot action"));
+        return false;
     }
-}
 
-QString ScreenshotService::savePath() const {
-    QString dir = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation)
-                  + "/CiderDeck";
-    QDir().mkpath(dir);
-    return dir + "/screenshot_" +
-           QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss") + ".png";
+    QDBusInterface component(
+        QStringLiteral("org.kde.kglobalaccel"),
+        componentReply.value().path(),
+        QStringLiteral("org.kde.kglobalaccel.Component"),
+        QDBusConnection::sessionBus());
+    if (!component.isValid()) {
+        emit screenshotFailed(QStringLiteral("Could not open the configured screenshot action"));
+        return false;
+    }
+
+    const QDBusMessage result = component.call(QStringLiteral("invokeShortcut"), actionName);
+    if (result.type() == QDBusMessage::ErrorMessage) {
+        emit screenshotFailed(result.errorMessage());
+        return false;
+    }
+    return true;
 }
 
 } // namespace ciderdeck

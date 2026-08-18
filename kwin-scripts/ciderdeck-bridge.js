@@ -16,6 +16,7 @@ function pushWindowList() {
                 pid: Number(w.pid || 0),
                 outputName: String(w.output ? w.output.name : ""),
                 minimized: Boolean(w.minimized),
+                unresponsive: Boolean(w.unresponsive),
                 active: Boolean(activeWin && String(w.internalId) === String(activeWin.internalId))
             };
         });
@@ -25,7 +26,16 @@ function pushWindowList() {
 }
 
 // Push on window events
-workspace.windowAdded.connect(function() {
+function watchWindow(window) {
+    if (window && window.unresponsiveChanged) {
+        window.unresponsiveChanged.connect(function() {
+            pushWindowList();
+        });
+    }
+}
+
+workspace.windowAdded.connect(function(window) {
+    watchWindow(window);
     pushWindowList();
 });
 
@@ -33,9 +43,13 @@ workspace.windowRemoved.connect(function() {
     pushWindowList();
 });
 
-workspace.activeWindowChanged.connect(function() {
-    pushWindowList();
-});
+if (workspace.activeWindowChanged) {
+    workspace.activeWindowChanged.connect(function() {
+        pushWindowList();
+    });
+}
+
+workspace.windowList().forEach(watchWindow);
 
 // Initial push
 pushWindowList();

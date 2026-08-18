@@ -32,12 +32,15 @@ void EditModeController::toggleEditMode() {
     else enterEditMode();
 }
 
-void EditModeController::beginDrag(const QString &tileId, int col, int row, int colSpan, int rowSpan) {
+void EditModeController::beginDrag(const QString &tileId, int col, int row, int colSpan, int rowSpan,
+                                   qreal pixelX, qreal pixelY) {
     dragTileId_ = tileId;
     ghostCol_ = col;
     ghostRow_ = row;
     ghostColSpan_ = colSpan;
     ghostRowSpan_ = rowSpan;
+    dragVisualX_ = pixelX;
+    dragVisualY_ = pixelY;
     ghostValid_ = true;
     dragging_ = true;
     emit dragStateChanged();
@@ -46,6 +49,9 @@ void EditModeController::beginDrag(const QString &tileId, int col, int row, int 
 void EditModeController::updateDrag(qreal pixelX, qreal pixelY, qreal cellWidth, qreal cellHeight,
                                      int gridGap, int gridPadding) {
     if (!dragging_) return;
+
+    dragVisualX_ = pixelX;
+    dragVisualY_ = pixelY;
 
     int newCol = snapToGrid(pixelX, cellWidth, gridGap, gridPadding, config_->gridColumns() - ghostColSpan_);
     int newRow = snapToGrid(pixelY, cellHeight, gridGap, gridPadding, config_->gridRows() - ghostRowSpan_);
@@ -163,6 +169,8 @@ void EditModeController::addTile(const QString &typeStr) {
         colSpan = 8; rowSpan = 2; break;
     case TileType::ProcessManager:
         colSpan = 8; rowSpan = 6; break;
+    case TileType::Updates:
+        colSpan = 8; rowSpan = 4; break;
     default:
         colSpan = 4; rowSpan = 4; break;
     }

@@ -15,6 +15,7 @@ WeatherService::WeatherService(QObject *parent)
     refreshTimer_->setInterval(30 * 60 * 1000); // 30 minutes
     connect(refreshTimer_, &QTimer::timeout, this, &WeatherService::refresh);
     refreshTimer_->start();
+    QTimer::singleShot(0, this, &WeatherService::refresh);
 }
 
 void WeatherService::refresh() {
@@ -27,12 +28,18 @@ void WeatherService::refresh() {
 }
 
 void WeatherService::setLocations(const QStringList &locations) {
+    if (locations_ == locations)
+        return;
+
     locations_ = locations;
     currentLocationIndex_ = 0;
     refresh();
 }
 
 void WeatherService::setUnit(const QString &unit) {
+    if (unit_ == unit)
+        return;
+
     unit_ = unit;
     refresh();
 }
@@ -46,9 +53,9 @@ void WeatherService::setCurrentLocationIndex(int idx) {
 }
 
 void WeatherService::setRefreshInterval(int minutes) {
-    if (minutes > 0) {
-        refreshTimer_->setInterval(minutes * 60 * 1000);
-    }
+    const int interval = minutes * 60 * 1000;
+    if (minutes > 0 && refreshTimer_->interval() != interval)
+        refreshTimer_->setInterval(interval);
 }
 
 void WeatherService::nextLocation() {

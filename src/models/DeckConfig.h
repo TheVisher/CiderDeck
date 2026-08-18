@@ -4,6 +4,7 @@
 #include <QVariantList>
 #include <QVariantMap>
 #include <QList>
+#include <QStringList>
 
 #include "TileData.h"
 
@@ -12,6 +13,7 @@ namespace ciderdeck {
 struct PageData {
     QString id;
     QString name;
+    QString type = QStringLiteral("dashboard");
     QList<TileData> tiles;
 
     QJsonObject toJson() const;
@@ -92,13 +94,18 @@ public:
     Q_INVOKABLE bool importConfig(const QString &path);
 
     Q_INVOKABLE void addPage(const QString &name = QString());
+    Q_INVOKABLE int ensureAgentWorkspacePage();
     Q_INVOKABLE void removePage(int index);
+    Q_INVOKABLE bool movePage(int fromIndex, int toIndex);
 
+    Q_INVOKABLE QStringList pageNames() const;
+    Q_INVOKABLE QString pageType(int page) const;
     Q_INVOKABLE QVariantList tilesForPage(int page) const;
     Q_INVOKABLE void addTile(int page, const QVariantMap &tileMap);
     Q_INVOKABLE void removeTile(const QString &tileId);
     Q_INVOKABLE void updateTile(const QString &tileId, const QVariantMap &changes);
     Q_INVOKABLE void moveTile(const QString &tileId, int col, int row);
+    Q_INVOKABLE bool moveTileToPage(const QString &tileId, int targetPage);
     Q_INVOKABLE void resizeTile(const QString &tileId, int colSpan, int rowSpan);
 
     const QList<PageData> &pages() const { return pages_; }
@@ -115,6 +122,7 @@ signals:
     void configLoaded();
 
 private:
+    bool backupConfig(const QString &reason) const;
     void ensureDefaultPage();
     int findTilePage(const QString &tileId) const;
 

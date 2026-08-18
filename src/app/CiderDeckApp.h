@@ -19,6 +19,8 @@ class MprisManager;
 class WeatherService;
 class SystemMonitorService;
 class ProcessManagerService;
+class UpdateService;
+class AgentTerminalService;
 class ScreenshotService;
 class BrightnessService;
 class ClipboardService;
@@ -26,6 +28,7 @@ class TimerService;
 class AudioMixerService;
 class KWinDBusClient;
 class EvdevTouchService;
+class TouchCalibrationService;
 class TileGridModel;
 class EditModeController;
 class ToastModel;
@@ -58,6 +61,8 @@ private:
     WeatherService *weatherService_ = nullptr;
     SystemMonitorService *systemMonitor_ = nullptr;
     ProcessManagerService *processManager_ = nullptr;
+    UpdateService *updateService_ = nullptr;
+    AgentTerminalService *agentTerminalService_ = nullptr;
     ScreenshotService *screenshotService_ = nullptr;
     BrightnessService *brightnessService_ = nullptr;
     ClipboardService *clipboardService_ = nullptr;
@@ -70,6 +75,7 @@ private:
     AppFilterModel *appFilterModel_ = nullptr;
     QWindow *mainWindow_ = nullptr;
     EvdevTouchService *evdevTouch_ = nullptr;
+    TouchCalibrationService *touchCalibration_ = nullptr;
 };
 
 } // namespace ciderdeck

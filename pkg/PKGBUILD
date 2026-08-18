@@ -1,15 +1,21 @@
-# Maintainer: Your Name <your@email.com>
+# Maintainer: TheVisher
 pkgname=ciderdeck
-pkgver=0.1.0.r26.0eb8388
+pkgver=0.1.0.r33.d9985a9
 pkgrel=1
 pkgdesc='Touch-optimized dashboard for Corsair Xeneon Edge'
 arch=('x86_64')
-url='https://github.com/eaholum/ciderdeck'
+url='https://github.com/TheVisher/CiderDeck'
 license=('GPL-3.0-or-later')
 depends=(
   'qt6-base'
   'qt6-declarative'
   'qt6-5compat'
+  'layer-shell-qt'
+  'kwindowsystem'
+  'kstatusnotifieritem'
+  'pulseaudio-qt'
+  'ddcutil'
+  'tmux'
 )
 makedepends=(
   'cmake'
@@ -18,17 +24,17 @@ makedepends=(
   'kwindowsystem'
   'kstatusnotifieritem'
   'pulseaudio-qt'
-  'ddcutil'
-  'qt6-multimedia'
 )
 optdepends=(
-  'layer-shell-qt: layer-shell placement on Wayland'
-  'kwindowsystem: blur effects'
-  'kstatusnotifieritem: system tray integration'
-  'pulseaudio-qt: audio mixer control'
-  'ddcutil: monitor brightness via DDC/CI'
+  'pacman-contrib: official repository update checks'
+  'paru: AUR update checks and interactive system updates'
+  'flatpak: Flatpak update checks and interactive updates'
+  'konsole: fallback update terminal if the embedded PTY cannot start'
+  'easyeffects: audio mixer EQ preset support'
+  'nvidia-utils: NVIDIA GPU monitoring'
+  'gtk3: launching applications through gtk-launch'
 )
-source=("${pkgname}::git+file://$(cd "${PWD}/.." && pwd)")
+source=("${pkgname}::git+file://$(cd "${PWD}/.." && pwd)#branch=ciderdeck-next")
 sha256sums=('SKIP')
 
 pkgver() {

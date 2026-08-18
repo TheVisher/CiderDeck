@@ -2,6 +2,14 @@
 
 #include <QObject>
 #include <QString>
+#include <QStringList>
+#include <QList>
+#include <QHash>
+
+#include <functional>
+
+#include "models/TouchCalibration.h"
+#include "services/TouchCalibrationService.h"
 
 class QWindow;
 class QSocketNotifier;
@@ -9,7 +17,9 @@ class QTimer;
 
 namespace ciderdeck {
 
-class EvdevTouchService : public QObject {
+class EvdevTouchServiceTests;
+
+class EvdevTouchService : public QObject, public TouchCalibrationDevice {
     Q_OBJECT
     Q_PROPERTY(bool active READ active NOTIFY activeChanged)
     Q_PROPERTY(QString devicePath READ devicePath NOTIFY devicePathChanged)
@@ -19,7 +29,18 @@ public:
     ~EvdevTouchService() override;
 
     bool active() const { return fd_ >= 0; }
-    QString devicePath() const { return devicePath_; }
+    QString devicePath() const override { return devicePath_; }
+    bool isAvailable() const override { return active(); }
+    QString deviceName() const override;
+    QString deviceIdentity() const override;
+    QString statusText() const override;
+    bool hasCalibration() const override { return hasCalibrationProfile_; }
+    TouchAffineTransform currentCalibration() const override { return calibrationTransform_; }
+    void useCalibration(const TouchAffineTransform &transform) override;
+    bool saveCalibration(const TouchAffineTransform &transform, QString *error) override;
+    bool resetCalibration(QString *error) override;
+    void setCalibrationCaptureActive(bool active) override { calibrationCaptureActive_ = active; }
+    void setWindow(QWindow *window) { window_ = window; }
 
     Q_INVOKABLE bool start(const QString &devicePath = {});
     Q_INVOKABLE void stop();
@@ -27,12 +48,127 @@ public:
 signals:
     void activeChanged();
     void devicePathChanged();
+    void calibrationChanged();
+    void rawTouchPressed(const QPointF &position);
+    void rawTouchMoved(const QPointF &position);
+    void rawTouchReleased(const QPointF &position);
 
 private slots:
     void onSystemWake(bool suspending);
 
 private:
+    friend class EvdevTouchServiceTests;
+
+    enum class DeviceProbeResult {
+        Unavailable,
+        NotTouchscreen,
+        Touchscreen,
+        PermissionDenied,
+    };
+
+    struct DeviceIdentity {
+        quint16 busType = 0;
+        quint16 vendor = 0;
+        quint16 product = 0;
+        quint16 version = 0;
+        QString name;
+        QString physical;
+
+        bool isValid() const;
+        bool operator==(const DeviceIdentity &other) const = default;
+    };
+
+    struct DeviceCandidate {
+        QString path;
+        DeviceIdentity identity;
+        bool direct = false;
+        bool hasAbsX = false;
+        bool hasAbsY = false;
+        bool hasMtX = false;
+        bool hasMtY = false;
+        bool hasBtnTouch = false;
+        bool hasMtTrackingId = false;
+        bool hasRelX = false;
+        bool hasRelY = false;
+    };
+
+    struct ProbedDevice {
+        ProbedDevice() = default;
+        ProbedDevice(DeviceProbeResult value) : result(value) {}
+
+        DeviceProbeResult result = DeviceProbeResult::Unavailable;
+        DeviceCandidate candidate;
+    };
+
+    enum class TouchAction {
+        None,
+        Press,
+        Move,
+        Release,
+    };
+
+    struct TouchUpdate {
+        TouchAction action = TouchAction::None;
+        int x = 0;
+        int y = 0;
+        bool reconnect = false;
+    };
+
+    struct MtContact {
+        int trackingId = -1;
+        int x = 0;
+        int y = 0;
+    };
+
+    struct InputState {
+        QHash<int, MtContact> contacts;
+        int currentSlot = 0;
+        int activeSlot = -1;
+        int x = 0;
+        int y = 0;
+        bool mtSeen = false;
+        bool buttonDown = false;
+        bool pressed = false;
+        bool dropping = false;
+    };
+
+    struct RetryState {
+        int recordFailure();
+        bool shouldLogUnavailable();
+        void markUnavailable();
+        bool markRecovered();
+        void reset();
+
+        int failureCount = 0;
+        bool unavailable = false;
+        bool unavailableLogEmitted = false;
+    };
+
+    static QStringList eventDevicePaths(const QString &inputDirectory);
+    static QString attemptReconnectCycle(
+        const QString &rememberedPath,
+        const std::function<QString()> &detectDevice,
+        const std::function<bool(const QString &)> &openDevice);
+    static QString permissionDeniedError(const QString &path);
+    static ProbedDevice probeDevice(const QString &path);
+    static DeviceProbeResult probeResultForOpenError(int errorNumber);
+    static int candidateScore(const DeviceCandidate &candidate);
+    static DeviceCandidate selectBestCandidate(const QList<DeviceCandidate> &candidates);
+    static DeviceCandidate selectBestCandidate(
+        const QList<DeviceCandidate> &candidates,
+        const DeviceIdentity &requiredIdentity);
+    static TouchUpdate processInputEvent(
+        InputState &state, quint16 type, quint16 code, qint32 value);
+    static TouchUpdate cancelInput(InputState &state);
+    QPointF normalizedPosition(const TouchUpdate &update) const;
+    void dispatchTouchUpdate(const TouchUpdate &update);
     QString detectDevice();
+    bool openDevice(const QString &path);
+    void closeDevice();
+    void handleReconnectFailure();
+    void loadCalibrationProfile();
+    void logOpened(bool recovered) const;
+    void scheduleReconnect(int delayMs);
     void onReadReady();
     void reconnect();
     void disableUsbAutosuspend();
@@ -43,6 +179,14 @@ private:
     QTimer *reconnectTimer_ = nullptr;
     QString devicePath_;
     QString lastDevicePath_; // remembered across reconnects
+    QString lastOpenError_;
+    RetryState retryState_;
+    bool runningRequested_ = false;
+    QString inputDirectory_ = QStringLiteral("/dev/input");
+    std::function<ProbedDevice(const QString &)> deviceProbe_;
+    DeviceIdentity selectedIdentity_;
+    DeviceCandidate selectedCandidate_;
+    QString calibrationStoragePath_;
 
     // Axis ranges from EVIOCGABS
     int absXMin_ = 0;
@@ -50,11 +194,11 @@ private:
     int absYMin_ = 0;
     int absYMax_ = 1;
 
-    // Current touch state
-    bool touchDown_ = false;
-    bool pressed_ = false;
-    int currentX_ = 0;
-    int currentY_ = 0;
+    TouchAffineTransform calibrationTransform_;
+    bool hasCalibrationProfile_ = false;
+    bool calibrationCaptureActive_ = false;
+
+    InputState inputState_;
 };
 
 } // namespace ciderdeck

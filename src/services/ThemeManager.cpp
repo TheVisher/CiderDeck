@@ -27,14 +27,14 @@ void ThemeManager::refresh() {
 
 void ThemeManager::applyDark() {
     isDark_ = true;
-    backgroundColor_ = QColor(26, 26, 46);       // #1a1a2e
-    textColor_ = QColor(224, 224, 224);            // #e0e0e0
-    secondaryTextColor_ = QColor(160, 160, 170);   // #a0a0aa
-    accentColor_ = QColor(68, 136, 255);           // #4488ff
-    borderColor_ = QColor(255, 255, 255, 25);      // white 10%
-    overlayColor_ = QColor(255, 255, 255, 15);     // white 6%
-    successColor_ = QColor(76, 175, 80);           // green
-    errorColor_ = QColor(244, 67, 54);             // red
+    backgroundColor_ = QColor(20, 26, 35);         // #141a23
+    textColor_ = QColor(244, 247, 251);             // #f4f7fb
+    secondaryTextColor_ = QColor(166, 178, 192);    // #a6b2c0
+    accentColor_ = QColor(77, 163, 255);            // #4da3ff
+    borderColor_ = QColor(255, 255, 255, 30);
+    overlayColor_ = QColor(255, 255, 255, 20);
+    successColor_ = QColor(70, 199, 144);
+    errorColor_ = QColor(255, 107, 107);
 }
 
 void ThemeManager::applyLight() {

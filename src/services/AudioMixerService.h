@@ -19,6 +19,7 @@ class AudioMixerService : public QObject {
     Q_OBJECT
 
     Q_PROPERTY(QVariantList groups READ groups NOTIFY groupsChanged)
+    Q_PROPERTY(QVariantList outputDestinations READ outputDestinations NOTIFY outputDestinationsChanged)
     Q_PROPERTY(int micVolume READ micVolume NOTIFY micVolumeChanged)
     Q_PROPERTY(bool micMuted READ micMuted NOTIFY micMutedChanged)
     Q_PROPERTY(QStringList eqPresets READ eqPresets NOTIFY eqPresetsChanged)
@@ -33,6 +34,7 @@ public:
         bool      muted     = false;
         QStringList apps;
         bool      isGeneral = false; // true for the catch-all "General" group
+        QString   outputSinkName;
     };
 
     explicit AudioMixerService(ciderdeck::AudioManager *audioManager,
@@ -40,6 +42,7 @@ public:
 
     // Q_PROPERTY accessors
     QVariantList groups() const;
+    QVariantList outputDestinations() const;
     int          micVolume() const    { return micVolume_; }
     bool         micMuted()  const    { return micMuted_; }
     QStringList  eqPresets() const    { return eqPresets_; }
@@ -49,6 +52,7 @@ public:
     // Group management
     Q_INVOKABLE void setGroupVolume(int groupIndex, int percent);
     Q_INVOKABLE void setGroupMuted(int groupIndex, bool muted);
+    Q_INVOKABLE void setGroupOutput(int groupIndex, const QString &sinkName);
     Q_INVOKABLE void addGroup(const QString &name);
     Q_INVOKABLE void removeGroup(int groupIndex);
     Q_INVOKABLE void renameGroup(int groupIndex, const QString &name);
@@ -76,6 +80,7 @@ public:
 
 signals:
     void groupsChanged();
+    void outputDestinationsChanged();
     void micVolumeChanged();
     void micMutedChanged();
     void eqPresetsChanged();
@@ -95,6 +100,9 @@ private:
 
     // PulseAudio sink-input model slots
     void onSinkInputAdded(const QModelIndex &parent, int first, int last);
+    void onSinkModelChanged();
+    void routeSinkInput(PulseAudioQt::SinkInput *stream);
+    void routeAllSinkInputs();
 
     // Refresh micVolume_ / micMuted_ from the default source
     void updateMicFromSource();

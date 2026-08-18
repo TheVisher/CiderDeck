@@ -83,6 +83,7 @@ private:
 #ifdef HAVE_KF6PULSEAUDIOQT
     void connectToDefaultSink();
     void updateFromDefaultSink();
+    void syncAsmVirtualSinks();
 
     PulseAudioQt::SinkModel *sinkModel_ = nullptr;
     PulseAudioQt::SinkInputModel *sinkInputModel_ = nullptr;

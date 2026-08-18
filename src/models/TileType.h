@@ -14,6 +14,7 @@ enum class TileType {
     Weather,
     SystemMonitor,
     ProcessManager,
+    Updates,
     Screenshot,
     Brightness,
     Clipboard,
@@ -34,6 +35,7 @@ inline QString tileTypeToString(TileType type) {
     case TileType::Weather:         return QStringLiteral("weather");
     case TileType::SystemMonitor:   return QStringLiteral("system_monitor");
     case TileType::ProcessManager:  return QStringLiteral("process_manager");
+    case TileType::Updates:         return QStringLiteral("updates");
     case TileType::Screenshot:      return QStringLiteral("screenshot");
     case TileType::Brightness:      return QStringLiteral("brightness");
     case TileType::Clipboard:       return QStringLiteral("clipboard");
@@ -54,6 +56,7 @@ inline TileType tileTypeFromString(const QString &str) {
     if (str == "weather")          return TileType::Weather;
     if (str == "system_monitor")   return TileType::SystemMonitor;
     if (str == "process_manager")  return TileType::ProcessManager;
+    if (str == "updates")          return TileType::Updates;
     if (str == "screenshot")       return TileType::Screenshot;
     if (str == "brightness")       return TileType::Brightness;
     if (str == "clipboard")        return TileType::Clipboard;

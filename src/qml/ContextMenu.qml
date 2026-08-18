@@ -6,6 +6,7 @@ Menu {
 
     property string targetTileId: ""
     property bool onTile: targetTileId !== ""
+    signal pageDeleteRequested(int pageIndex, string pageName)
 
     // Tile-specific items
     MenuItem {
@@ -47,6 +48,7 @@ Menu {
         MenuItem { text: "Weather";         onTriggered: editController.addTile("weather") }
         MenuItem { text: "System Monitor";  onTriggered: editController.addTile("system_monitor") }
         MenuItem { text: "Process Manager"; onTriggered: editController.addTile("process_manager") }
+        MenuItem { text: "Updates";         onTriggered: editController.addTile("updates") }
         MenuItem { text: "Screenshot";      onTriggered: editController.addTile("screenshot") }
         MenuItem { text: "Brightness";      onTriggered: editController.addTile("brightness") }
         MenuItem { text: "Clipboard";       onTriggered: editController.addTile("clipboard") }
@@ -70,10 +72,29 @@ Menu {
     }
 
     MenuItem {
+        text: "Move Page Left"
+        enabled: deckConfig.currentPage > 0
+        onTriggered: {
+            var page = deckConfig.currentPage
+            deckConfig.movePage(page, page - 1)
+        }
+    }
+
+    MenuItem {
+        text: "Move Page Right"
+        enabled: deckConfig.currentPage < deckConfig.pageCount - 1
+        onTriggered: {
+            var page = deckConfig.currentPage
+            deckConfig.movePage(page, page + 1)
+        }
+    }
+
+    MenuItem {
         text: "Delete Page"
         enabled: deckConfig.pageCount > 1
         onTriggered: {
-            deckConfig.removePage(deckConfig.currentPage)
+            var page = deckConfig.currentPage
+            contextMenu.pageDeleteRequested(page, deckConfig.pageNames()[page])
         }
     }
 
