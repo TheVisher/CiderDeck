@@ -301,6 +301,7 @@ private slots:
     void mediaDurationSurvivesIncompleteMetadataRefresh();
     void terminalOutputIsMadeReadable();
     void updateCommandHandlesStalePacmanLocks();
+    void updateCommandRevalidatesStaleLockUnderPrivilege();
 };
 
 void ServiceSettingsTests::timerDefaultDurationIsApplied()
@@ -1340,7 +1341,7 @@ void ServiceSettingsTests::updateCommandHandlesStalePacmanLocks()
     QVERIFY(command.contains(QStringLiteral("Stale Pacman lock detected")));
     QVERIFY(command.contains(QStringLiteral("Remove the stale lock and continue?")));
     QVERIFY(command.contains(QStringLiteral("Pacman is actively in use by")));
-    QVERIFY(command.contains(QStringLiteral("sudo rm -f -- \"$pacman_lock\"")));
+    QVERIFY(command.contains(QStringLiteral("sudo /bin/sh -c")));
 
     QProcess syntaxCheck;
     syntaxCheck.start(QStringLiteral("/bin/bash"), {QStringLiteral("-n")});
@@ -1349,6 +1350,24 @@ void ServiceSettingsTests::updateCommandHandlesStalePacmanLocks()
     syntaxCheck.closeWriteChannel();
     QVERIFY(syntaxCheck.waitForFinished());
     QCOMPARE(syntaxCheck.exitCode(), 0);
+}
+
+void ServiceSettingsTests::updateCommandRevalidatesStaleLockUnderPrivilege()
+{
+    const QString command = UpdateService::updateCommandScript();
+    const qsizetype authenticate = command.indexOf(QStringLiteral("sudo -v"));
+    const qsizetype privilegedCheck = command.indexOf(QStringLiteral("sudo /bin/sh -c"));
+    const qsizetype processCheck = command.indexOf(
+        QStringLiteral("pgrep -x \"$manager\""), privilegedCheck);
+    const qsizetype removal = command.indexOf(
+        QStringLiteral("rm -f -- \"$lock\""), privilegedCheck);
+
+    QVERIFY(authenticate >= 0);
+    QVERIFY(privilegedCheck > authenticate);
+    QVERIFY(processCheck > privilegedCheck);
+    QVERIFY(removal > processCheck);
+    QVERIFY(command.contains(QStringLiteral("exit 73")));
+    QVERIFY(!command.contains(QStringLiteral("sudo rm -f -- \"$pacman_lock\"")));
 }
 
 QTEST_GUILESS_MAIN(ServiceSettingsTests)

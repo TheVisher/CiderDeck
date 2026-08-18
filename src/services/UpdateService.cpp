@@ -172,14 +172,28 @@ while [ -e "$pacman_lock" ]; do
 
     case "$clear_lock" in
         y|Y|yes|YES|Yes)
-            manager=$(active_package_manager)
-            if [ -n "$manager" ]; then
-                printf '\n\033[1;31m%s started before the lock could be cleared. Nothing was removed.\033[0m\n' "$manager"
-                continue
+            if ! sudo -v; then
+                printf '\n\033[1;31mAdministrator authentication failed. The lock was not removed.\033[0m\n'
+                arch_status=75
+                break
             fi
-            if sudo rm -f -- "$pacman_lock" && [ ! -e "$pacman_lock" ]; then
+
+            if sudo /bin/sh -c '
+lock=$1
+for manager in pacman paru yay pikaur trizen pamac; do
+    if pgrep -x "$manager" >/dev/null 2>&1; then
+        exit 73
+    fi
+done
+rm -f -- "$lock"
+' ciderdeck-pacman-lock "$pacman_lock" && [ ! -e "$pacman_lock" ]; then
                 printf '\033[1;32mStale lock cleared. Continuing with updates.\033[0m\n\n'
             else
+                remove_status=$?
+                if [ "$remove_status" -eq 73 ]; then
+                    printf '\n\033[1;31mA package manager started before the lock could be cleared. Nothing was removed.\033[0m\n'
+                    continue
+                fi
                 printf '\033[1;31mThe stale lock could not be removed.\033[0m\n'
                 arch_status=75
                 break
